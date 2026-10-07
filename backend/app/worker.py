@@ -3,6 +3,8 @@
 A request row is its own job: pending -> processing (attempts + 1, claimed_at) -> processed, or back to
 pending after a transient error, or needs_review after a terminal error or the last attempt. Claimed
 supports go through the same loop with their own check_* columns; their dead end is "disputed".
+Strategic-fit ratings come last (fit_* columns on the need): requests and claims are never kept waiting by
+them, and their dead end is "failed", which leaves the ratings in use unchanged. Offline mode has no rater.
 """
 
 import asyncio
@@ -15,8 +17,8 @@ from sqlalchemy.engine import Engine
 from sqlmodel import Session, col, select
 
 from app.ai.gateway import TerminalError, TransientError
-from app.ai.pipeline import Deps, dispute_claim, process_claim, process_request
-from app.models import Request, RequestStatus, Support, SupportLinkStatus, utcnow
+from app.ai.pipeline import Deps, dispute_claim, process_claim, process_fit, process_request
+from app.models import Need, NeedStatus, Request, RequestStatus, Support, SupportLinkStatus, utcnow
 
 log = logging.getLogger("distill.worker")
 
@@ -88,7 +90,46 @@ class Worker:
                 s.commit()
                 self._claim(s, sup.id)
                 return f"claim:{sup.id}"
+            if self.deps.mode != "llm":
+                return None
+            due = s.exec(
+                select(Need)
+                .where(Need.fit_status == "pending", Need.status != NeedStatus.merged)
+                .order_by(col(Need.created_at), col(Need.id))
+            ).all()
+            need = next((x for x in due if self._ready(x.fit_attempts, x.fit_started_at, now)), None)
+            if need is not None and need.id is not None:
+                need.fit_attempts, need.fit_started_at = need.fit_attempts + 1, now
+                s.add(need)
+                s.commit()
+                self._fit(s, need.id)
+                return f"fit:{need.id}"
         return None
+
+    def _fit(self, s: Session, need_id: int) -> None:
+        try:
+            process_fit(s, need_id, self.deps)
+        except Exception as exc:  # transient errors retry with backoff; anything else fails the rating now
+            s.rollback()
+            need = s.get(Need, need_id)
+            assert need is not None
+            transient = isinstance(exc, TransientError)
+            reason = (
+                str(exc)
+                if isinstance(exc, TransientError | TerminalError)
+                else f"internal error: {type(exc).__name__}: {exc}"
+            )
+            if transient and need.fit_attempts < self.cfg.max_attempts:
+                need.fit_error = reason
+            else:
+                need.fit_status = "failed"
+                need.fit_error = (
+                    f"Rating failed after {need.fit_attempts} attempts; last error: {reason}"
+                    if transient
+                    else reason
+                )
+            s.add(need)
+            s.commit()
 
     def _request(self, s: Session, request_id: int) -> None:
         try:

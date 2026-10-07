@@ -98,10 +98,17 @@ class Need(SQLModel, table=True):
     status: NeedStatus = Field(default=NeedStatus.open, index=True)
     merged_into_id: int | None = Field(default=None, foreign_key="need.id")
     created_by: str = "ai"  # ai | pm | seed
-    priority_score: float | None = None
-    demand: float | None = None
-    urgency: float | None = None
-    strategic_fit: float | None = None
+    # Priority isn't stored: it is computed when read, from current data and config (ADR 0009).
+    # Strategic fit is a job on the need row (ADR 0007 pattern): pending -> rated, or failed with a reason.
+    fit_status: str | None = Field(default=None, index=True)  # pending | rated | failed
+    fit_accounts: int | None = None  # supporting accounts when the latest rating was queued
+    fit_attempts: int = 0
+    fit_started_at: datetime | None = None
+    fit_error: str | None = None
+    fit_goals_digest: str | None = (
+        None  # the goals the ratings in use were made against (scoring.goals_digest)
+    )
+    fit_run_id: int | None = None  # airun.id of the ratings in use; no FK: AIRun.need_id already points here
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
 
@@ -217,6 +224,21 @@ class AIRun(SQLModel, table=True):
     error: str | None = None
     request_id: int | None = Field(default=None, foreign_key="request.id")
     need_id: int | None = Field(default=None, foreign_key="need.id")
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class GoalRating(SQLModel, table=True):
+    """One goal's 0-3 rating from one strategic-fit run. Rows are never updated: a re-rating adds a run, and
+    Need.fit_run_id points at the one in use. S is computed from these with the current goal weights."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    need_id: int = Field(foreign_key="need.id", index=True)
+    ai_run_id: int = Field(foreign_key="airun.id", index=True)
+    goal: str
+    rating: int
+    rationale: str
+    quote: str | None = None  # kept only if found verbatim in the requests the model was given
+    quote_dropped: bool = False  # the model quoted something that isn't in them
     created_at: datetime = Field(default_factory=utcnow)
 
 

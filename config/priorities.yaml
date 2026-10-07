@@ -1,10 +1,76 @@
-# Prioritization (spec §8). Code computes every component; the model only rates strategic fit (should).
-weights: {demand: 0.40, urgency: 0.25, strategic: 0.35}
+# Prioritization (spec §8, ADR 0009). Code computes every component from this file when a need is read;
+# the model only rates each goal 0-3 (strategic_fit_v1). Changing a weight here re-ranks the backlog on the
+# next restart with no code change, no prompt change and no model call: ratings are stored per goal.
+
+# Priority = 100 x (demand x D + strategic x S + urgency x U). Must sum to 1.
+# Until a need is rated, S is left out and the other two are renormalised.
+weights:
+  demand: 0.40
+  strategic: 0.40
+  urgency: 0.20
+
+# Brightboard's written goals. Weights must sum to 1. The model sees key, title and description (not the
+# weight); changing a title or description changes what is rated, so it needs `make snapshot` and an eval run.
+goals:
+  - key: enterprise_readiness
+    title: Enterprise readiness
+    weight: 0.40
+    description: >-
+      Remove what stops large organisations from buying, rolling out or passing a security review of
+      Brightboard: identity and access control, user provisioning, auditability, data governance and
+      administration at scale.
+  - key: retention
+    title: Retention
+    weight: 0.35
+    description: >-
+      Keep existing customers getting value so they renew and expand: fix the pains that make teams use
+      Brightboard less, work around it, or consider leaving at renewal.
+  - key: self_serve_growth
+    title: Self-serve growth
+    weight: 0.25
+    description: >-
+      Help new teams sign up, connect their data and reach a useful dashboard on their own, and help usage
+      spread to more people without a sales or services touch.
+
+# Demand D = min(1, log10(1 + R/1000) / log10(1 + r_cap/1000)), over unique accounts:
+# R = sum of ARR x segment weight (customers) + p_win x pipeline x segment weight (prospects).
 demand:
   p_win: 0.2          # share of a prospect's pipeline value counted as demand
-  r_cap: 5000000      # revenue (USD) at which demand reaches 1.0, log scale
+  r_cap: 5000000      # weighted revenue (USD) at which demand reaches 1.0; the log keeps one account from dominating
+# Placeholders, not calibrated: who asks, on top of how much they pay. Product leadership sets these.
+segment_weights: {enterprise: 1.0, mid_market: 0.9, smb: 0.8}
+
+# Urgency U = severity_weight x highest severity + renewal_weight x (a supporting customer renews within renewal_days)
 urgency:
   severity_weight: 0.6
   renewal_weight: 0.4
   renewal_days: 90
 severity: {blocker: 1.0, important: 0.5, nice_to_have: 0.2, unknown: 0.0}
+
+# Quadrant cut-offs (inclusive). Popular is D (revenue-weighted demand), strategic is S.
+quadrant:
+  popular: 0.60       # weighted R of about $165k: two or three mid-market accounts, or one large one
+  strategic: 0.50     # an average rating of 1.5 out of 3
+
+# Routing: the PM team that owns each product area (app/ai/schemas.py ProductArea). Unknown areas go to default.
+owners:
+  default: product-triage
+  areas:
+    security_admin: platform
+    performance: platform
+    embedded: platform
+    data_sources: data
+    export: data
+    sharing: reporting
+    alerts: reporting
+    collaboration: reporting
+    ui: reporting
+    mobile: reporting
+    onboarding: growth
+    localization: growth
+
+# Strategic fit (strategic_fit_v1): model alias from config (fast = FAST_MODEL, Haiku 4.5, REPORT §4.1).
+# Rated when a need is created and again when its supporting accounts cross each of these counts.
+strategic_fit:
+  model: fast
+  rerate_at_accounts: [3, 10]

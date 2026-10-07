@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, func, select
 
-from app.models import Account, Need, Request, Requester, RequestStatus
+from app.models import Account, AIRun, GoalRating, Need, Request, Requester, RequestStatus
 
 SEED = Path(__file__).resolve().parents[2] / "seed"
 
@@ -148,7 +148,6 @@ def test_loader_applies_the_recorded_snapshot(engine: Engine) -> None:
         assert len(events) == linked and all(e.actor == LinkActor.auto for e in events)
         auto = s.exec(select(AISuggestion).where(AISuggestion.kind == SuggestionKind.duplicate)).all()
         assert len(auto) == bands["auto"] + bands["suggest"]
-        assert all(n.priority_score is not None for n in s.exec(select(Need)).all())
 
 
 def test_a_tampered_snapshot_is_rejected(
@@ -213,3 +212,73 @@ def test_seeded_related_suggestions_carry_their_run_and_score(engine: Engine) ->
             r.processed_at is not None and r.processed_at >= r.created_at
             for r in s.exec(select(Request)).all()
         )
+
+
+# --- recorded strategic-fit ratings (fit_snapshot.json, built by `make eval-fit-report`) ------------------
+
+
+def _fit_snapshot(engine: Engine, quote: str) -> dict[str, Any]:
+    """A fit snapshot for every need the snapshot seed creates, rating each goal 2 with the given quote."""
+    from app.scoring import goals_digest, load_priorities
+    from seed.load import CONFIG, load_seed
+
+    load_seed(engine, snapshot=True)
+    goals = load_priorities(CONFIG / "priorities.yaml").goals
+    with Session(engine) as s:
+        titles = [n.title for n in s.exec(select(Need)).all()]
+    run = {"step": "strategic_fit", "model": "claude-haiku-4-5-20251001", "prompt_version": "strategic_fit_v1",
+           "input_tokens": 900, "output_tokens": 300, "cost_usd": 0.0024, "latency_ms": 2100, "outcome": "ok"}  # fmt: skip
+    return {"prompt": "strategic_fit_v1", "goals_digest": goals_digest(goals), "needs": {
+        t: {"ratings": [{"goal": g.key, "rating": 2, "rationale": "r", "quote": quote} for g in goals],
+            "runs": [run]} for t in titles}}  # fmt: skip
+
+
+def test_recorded_fit_ratings_are_applied_with_quotes_rechecked(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import seed.load as loader
+
+    path = tmp_path / "fit_snapshot.json"
+    path.write_text(json.dumps(_fit_snapshot(engine, quote="not in any request")), encoding="utf-8")
+    monkeypatch.setattr(loader, "FIT_SNAPSHOT", path)
+    counts = loader.load_seed(engine, snapshot=True)
+    with Session(engine) as s:
+        needs = s.exec(select(Need)).all()
+        assert counts["fit_ratings"] == len(needs) > 0
+        assert all(n.fit_status == "rated" and n.fit_run_id is not None for n in needs)
+        rows = s.exec(select(GoalRating)).all()
+        assert len(rows) == 3 * len(needs)
+        assert all(r.quote is None and r.quote_dropped for r in rows)  # rechecked against the requests
+        runs = s.exec(select(AIRun).where(AIRun.step == "strategic_fit")).all()
+        assert len(runs) == len(needs) and all(r.need_id is not None for r in runs)
+
+
+@pytest.mark.parametrize("tamper", ["goals", "unknown_need", "bad_rating"])
+def test_a_fit_snapshot_that_does_not_match_is_refused(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tamper: str
+) -> None:
+    import seed.load as loader
+
+    snap = _fit_snapshot(engine, quote="")
+    if tamper == "goals":
+        snap["goals_digest"] = "0" * 64  # rated against goals that have since changed
+    elif tamper == "unknown_need":
+        snap["needs"]["A need the seed doesn't create"] = next(iter(snap["needs"].values()))
+    else:
+        next(iter(snap["needs"].values()))["ratings"][0]["rating"] = 7
+    path = tmp_path / "fit_snapshot.json"
+    path.write_text(json.dumps(snap), encoding="utf-8")
+    monkeypatch.setattr(loader, "FIT_SNAPSHOT", path)
+    with pytest.raises(ValueError, match=r"fit_snapshot\.json"):
+        loader.load_seed(engine, snapshot=True)
+
+
+def test_without_a_fit_snapshot_needs_are_left_unrated(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import seed.load as loader
+
+    monkeypatch.setattr(loader, "FIT_SNAPSHOT", tmp_path / "missing.json")
+    assert loader.load_seed(engine, snapshot=True)["fit_ratings"] == 0
+    with Session(engine) as s:
+        assert all(n.fit_status is None for n in s.exec(select(Need)).all())

@@ -28,7 +28,7 @@ from app.models import (
     SupportLinkStatus,
     utcnow,
 )
-from app.scoring import refresh_need
+from app.services.priority import queue_fit_if_due
 
 
 def _kind(s: AISuggestion) -> str | None:
@@ -154,7 +154,7 @@ def accept(session: Session, suggestion_id: int, by: str, deps: Deps) -> dict[st
         _decide_once(session, s, kind, by, SuggestionState.accepted)
         sup.link_status, sup.updated_at = SupportLinkStatus.confirmed, utcnow()
         session.add(sup)
-        refresh_need(session, sup.need_id, deps.priorities)
+        queue_fit_if_due(session, sup.need_id, deps.priorities)
     else:
         r = session.get(Request, s.request_id)
         target = live_need(session, s.need_id)  # follow a merge that happened after the suggestion
@@ -176,7 +176,7 @@ def accept(session: Session, suggestion_id: int, by: str, deps: Deps) -> dict[st
             session.add(other)
         session.add(r)
         session.flush()
-        refresh_need(session, target, deps.priorities)
+        queue_fit_if_due(session, target, deps.priorities)
         moved = r
     session.commit()
     if moved is not None and moved.id is not None and moved.need_id is not None:
@@ -216,8 +216,8 @@ def _own_need(session: Session, r: Request, by: str, reason: str, deps: Deps) ->
         ):
             old.status, old.merged_into_id = NeedStatus.merged, need.id  # emptied: never offered again
             session.add(old)
-        refresh_need(session, old_id, deps.priorities)
-    refresh_need(session, need.id, deps.priorities)
+        queue_fit_if_due(session, old_id, deps.priorities)
+    queue_fit_if_due(session, need.id, deps.priorities)
     return need
 
 

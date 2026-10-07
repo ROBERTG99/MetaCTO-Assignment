@@ -46,7 +46,7 @@ Must = the golden path and is built first. Should = built only after the golden 
 | F1 | **Dedupe at the door (simple).** While the requester types, show the 5 closest needs, phrased as problem plus persona. This uses embeddings only and no LLM, under 300 ms server-side. "This is my need" calls the support endpoint, which creates a **requester claim** (a support in `claimed` state) that the intake workflow checks. Otherwise the requester submits a new request (`POST /requests`, saved as pending). | must | `api/test_requests_api.py` (passing); suggest API test (never calls the gateway; ranking); e2e GP1; metric M2 |
 | F2 | **Intake workflow** (background, after save): redact, embed, retrieve, extract, adjudicate, route, enrich, score (section 6). | must | Unit tests per deterministic step and for the worker; evals (extraction, retrieval recall@5, adjudication); e2e GP4 (failure path) |
 | F3 | **Confidence policy.** Routing score (section 8) produces: auto-link (labelled, undoable, 10% audit sample), suggestion in the inbox, or new need. A requester-claimed link is confirmed or disputed. | must | Unit tests (routing, policy, audit sampling); threshold choice in evals/REPORT.md; metric M4; e2e GP2 and GP5 |
-| F4 | **Prioritization.** Demand, urgency and score are computed in code (must). Strategic fit is rated by the model against config/goals.yaml, with the quote verified in code (should). Popular and strategic are shown separately. | must (computed) / should (fit) | Scoring unit tests; quote-verifier unit test; strategic-fit eval slice (should) |
+| F4 | **Prioritization** (ADR 0009). Demand, urgency, strategic fit and priority are computed in code when a need is read, with every component in the breakdown (must). Strategic fit is rated per goal by the model (strategic_fit_v1) against the goals in config/priorities.yaml, with the quote verified in code (should). Popular and strategic are shown separately, in the breakdown and in `GET /insights/quadrant`; each need is routed to the PM team owning its product area. | must (computed) / should (fit) | `unit/test_scoring.py`, `api/test_priority_api.py`, `unit/test_strategic_fit.py` (passing); strategic-fit agreement in evals/REPORT.md §5 |
 | F5 | **PM triage inbox.** Action tabs: Suggestions, Disputed claims, Needs review (AI failed), Audit sample. A read-only Auto-linked tab lists every auto-link with an undo button and requires no action (CLAUDE.md rule 2). Both texts side by side, with accept, reject, undo, link manually, new need, or merge needs. | must | `api/test_triage_api.py` (each transition in §5; links never deleted); e2e GP2-GP5; metric: suggestion acceptance rate |
 | F6 | **Decision brief.** A workflow: gather the facts, make one LLM call, verify every quote and number in code. An optional **overlap agent** finds needs this one overlaps with, blocks or depends on, using read-only search tools and a step cap; its findings feed the brief as cited evidence. If time runs short, the agent is dropped and the brief stays. | should | `unit/test_verify.py`; `unit/test_agent.py` (step cap, read-only tools) with FakeLLM; eval with fabricated quotes and numbers |
 | F7 | **Close the loop.** When a need's status changes, the AI drafts a requester update and a CS note per account, and flags commitments the PM didn't make. The PM approves. Delivery is in-app only. | should | `api/test_updates_api.py` (nothing goes out without approval); commitment-flag eval slice; metric M3 |
@@ -134,7 +134,7 @@ Model calls happen first. All results are then written in one transaction, so a 
 | Stakeholder messages (should) | AI drafts, the PM approves | The messages are external commitments |
 | Thresholds and weights | Config, changed by a human after an eval run | The model judges, code decides (rule 1) |
 
-## 8. Formulas (config at the repo root: config/routing.yaml, config/priorities.yaml, config/goals.yaml)
+## 8. Formulas (config at the repo root: config/routing.yaml, config/priorities.yaml)
 
 **Routing score**, for each candidate need *n* (ADR 0003):
 - *L_n*: the adjudicator's label. The model's stated confidence is recorded and shown, but not used.
@@ -152,19 +152,22 @@ A **claim** (a support in `claimed` state) on need *m* is checked by the same wo
 
 The **baseline** (no LLM, and the app's offline mode) has no label and no extracted fields. It routes on the top similarity *s* alone, with its own thresholds tuned on dev (`config/routing.yaml` → `baseline`) and the same three bands. Results: evals/REPORT.md §1.
 
-**Prioritization**, per need. Only member requests (need_id set) and confirmed supports count, and each account is counted once.
+**Prioritization**, per need (ADR 0009). Computed when the need is read, never stored, so the renewal window follows the date and a weight change in config/priorities.yaml re-ranks on restart. Only member requests (need_id set) and confirmed supports count (a claim counts once the workflow confirms it or a PM accepts it), and each account is counted once.
 - **Demand** `D = min(1, log10(1 + R/1000) / log10(1 + R_cap/1000))`.
-  - `R = Σ ARR_a` over customer accounts, plus `Σ p_win · pipeline_a` over prospects (`is_prospect`).
-  - Starting values: `p_win` 0.2; `R_cap` $5M.
-  - The log keeps one large account from dominating.
-- **Urgency** `U = 0.6 · max severity weight + 0.4 · renewal share`.
-  - Severity weights: blocker 1.0, important 0.5, nice_to_have 0.2.
-  - Renewal share: the supporting ARR that renews within 90 days, divided by all supporting ARR.
-- **Strategic fit** (should) `S = Σ_g weight_g · rating_g / 3`, over the goals in config/goals.yaml.
-  - Each rating is 0 to 3 and comes with a rationale and a quote verified in code.
-  - Until a need is rated, *S* is omitted, the other weights are renormalized, and the UI shows "not rated".
-- **Priority** `= 100 · (w_D·D + w_U·U + w_S·S)`. Default weights: 0.40, 0.25, 0.35.
-- **Popular** (unique supporters and accounts) and **strategic** (*S*) are shown next to the score, each with its inputs.
+  - `R = Σ ARR_a · w_seg(a)` over customer accounts, plus `Σ p_win · pipeline_a · w_seg(a)` over prospects (`is_prospect`).
+  - Values: `p_win` 0.2; `R_cap` $5M; segment weights enterprise 1.0, mid-market 0.9, SMB 0.8 (placeholders for product leadership). An unknown segment gets the lowest weight and is flagged.
+  - The log keeps one large account from dominating: ten times the revenue gives about 1.37 times the demand, and D is capped at 1.
+  - A customer with no ARR or a prospect with no pipeline still counts as an account, adds 0 revenue, and is listed under `gaps`.
+- **Urgency** `U = 0.6 · highest severity weight + 0.4 · [a supporting customer renews within 90 days]`.
+  - Severity weights: blocker 1.0, important 0.5, nice_to_have 0.2, unknown 0. Sources: confirmed supports' severity and member requests' extracted severity signal.
+  - The renewal term is yes/no (today through day 90, inclusive); prospects never renew. The renewing accounts are listed.
+- **Strategic fit** (should) `S = Σ_g weight_g · rating_g / 3`, over the goals in config/priorities.yaml: enterprise readiness 0.40, retention 0.35, self-serve growth 0.25.
+  - Each rating is 0 to 3, from strategic_fit_v1, with a one-sentence rationale and a quote verified in code (a quote not found in the requests is dropped and flagged; the rating stands).
+  - Until every configured goal has a rating, S is omitted, the other weights are renormalized, and the UI shows the status: pending, failed (with the reason), stale (rated against goals that have changed) or not rated.
+  - Rated when the need is created, and again when its supporting accounts cross 3 and 10, after a failure, or after the goals' text changes.
+- **Priority** `= 100 · (w_D·D + w_S·S + w_U·U)`, 0 to 100. Weights: 0.40, 0.40, 0.20 (must sum to 1; config with negative weights, or with D and U both 0, is refused). Ties: more accounts first, then the older need.
+- **Quadrant** (needs with S only): popular is `D ≥ 0.60` (a weighted R of about $165k), strategic is `S ≥ 0.50`. Clear win (both), strategic bet (strategic only), popular but off-strategy (popular only), park (neither). Shown with D, S and the account count, so popular and strategic stay visible separately.
+- **Owner:** the PM team for the product area (config `owners.areas`; platform, data, reporting, growth), else product-triage.
 
 ## 9. Cost per request by model option
 
@@ -244,3 +247,5 @@ Further guardrails shown in F8:
 - **A10** Severity (nice_to_have, important, blocker) is self-reported on a support. The extraction's severity signal is shown next to it but doesn't override it.
 - **A11** A request's description is optional (empty allowed) and capped at 5,000 characters; the title is required, 1-200 characters after trimming.
 - **A12** Staff (requesters with no account) must name the customer `account_id` for support, sales and cs requests; internal requests may have none. A customer can only submit for their own account. Supports are always by the requester themselves, so a support's account is the requester's.
+- **A13** Prospects' pipeline is weighted by their segment too, like customers' ARR (the request said "ARR times segment weight ... plus prospect pipeline"; one rule for both is simpler).
+- **A14** "Accepted" support in the prioritization request means a claim a PM accepted from the inbox, which sets the support to confirmed; there is no separate accepted state.

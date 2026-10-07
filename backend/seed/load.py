@@ -15,17 +15,18 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError, model_validator
 from sqlalchemy.engine import Engine
-from sqlmodel import Session, SQLModel
+from sqlmodel import Session, SQLModel, select
 
-from app.ai.pipeline import verify_quotes
+from app.ai.pipeline import fit_texts, verify_quotes
 from app.ai.policy import RoutingConfig, in_audit_sample, load_routing
 from app.ai.redact import redact
-from app.ai.schemas import Extraction
+from app.ai.schemas import Extraction, FitRating
 from app.db import create_tables, get_engine
 from app.models import (
     Account,
     AIRun,
     AISuggestion,
+    GoalRating,
     LinkAction,
     LinkActor,
     LinkEvent,
@@ -38,10 +39,12 @@ from app.models import (
     SuggestionKind,
     SuggestionState,
 )
-from app.scoring import load_priorities, refresh_need
+from app.scoring import goals_digest, load_priorities
+from app.services.priority import account_count
 
 SEED_DIR = Path(__file__).resolve().parent
 SNAPSHOT = SEED_DIR / "snapshot.json"
+FIT_SNAPSHOT = SEED_DIR / "fit_snapshot.json"
 CONFIG = SEED_DIR.parents[1] / "config"
 START = datetime(2026, 7, 1, 9, 0, tzinfo=UTC)
 
@@ -50,10 +53,12 @@ def _read(name: str) -> Any:
     return json.loads((SEED_DIR / name).read_text(encoding="utf-8"))
 
 
-def load_seed(engine: Engine, snapshot: bool = False) -> dict[str, int]:
+def load_seed(engine: Engine, snapshot: bool = False, fit: bool = True) -> dict[str, int]:
     """Drop and recreate every table, then insert the seed. Returns the row counts.
 
-    With snapshot=True, the recorded Haiku output in snapshot.json is applied on top (see apply_snapshot).
+    With snapshot=True, the recorded Haiku output in snapshot.json is applied on top (see apply_snapshot), then
+    the recorded strategic-fit ratings in fit_snapshot.json unless fit=False (evals/fit.py builds that file
+    from a seed without it).
     """
     import app.models  # noqa: F401  (registers the tables)
 
@@ -102,6 +107,7 @@ def load_seed(engine: Engine, snapshot: bool = False) -> dict[str, int]:
         if snapshot:
             by_ref = {r["ref"]: req for r, req in zip(_read("requests.json"), requests, strict=True)}
             counts.update(apply_snapshot(session, by_ref))
+            counts["fit_ratings"] = apply_fit_snapshot(session) if fit else 0
         return counts
 
 
@@ -181,7 +187,6 @@ def apply_snapshot(session: Session, by_ref: dict[str, Request]) -> dict[str, in
     """Apply recorded Haiku output in arrival order, as the worker would have processed it."""
     raw = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
     routing = load_routing(CONFIG / "routing.yaml")
-    priorities = load_priorities(CONFIG / "priorities.yaml")
     records = _check_snapshot(raw, routing)
     needs: dict[str, Need] = {}
 
@@ -284,12 +289,83 @@ def apply_snapshot(session: Session, by_ref: dict[str, Request]) -> dict[str, in
                     ai_run_id=run_id,
                 )
             )
-    session.flush()
-    for need in needs.values():
-        if need.id is not None:
-            refresh_need(session, need.id, priorities)
     session.commit()
     return {"needs": len(needs), "ai_runs": runs}
+
+
+class SnapshotFitRun(BaseModel):
+    step: Literal["strategic_fit"]
+    model: str
+    prompt_version: Literal["strategic_fit_v1"]
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+    latency_ms: int
+    outcome: str
+
+
+class SnapshotFit(BaseModel):
+    ratings: list[FitRating]
+    runs: list[SnapshotFitRun] = Field(min_length=1)
+
+
+def apply_fit_snapshot(session: Session) -> int:
+    """Apply recorded strategic-fit ratings (fit_snapshot.json), validated like live output.
+
+    Refused if the goals changed since the ratings were made (weights may change freely: S is computed when a
+    need is read), or if it names a need the seed doesn't create. Quotes are rechecked against the requests.
+    Without the file, needs are left unrated and the app says so.
+    """
+    if not FIT_SNAPSHOT.exists():
+        return 0
+    raw = json.loads(FIT_SNAPSHOT.read_text(encoding="utf-8"))
+    goals = load_priorities(CONFIG / "priorities.yaml").goals
+    stale = (
+        "fit_snapshot.json was rated against other goals or another prompt: re-rate with `make eval STEP=fit` "
+        "(paid), or delete it to seed with needs unrated"
+    )
+    if raw.get("goals_digest") != goals_digest(goals) or raw.get("prompt") != "strategic_fit_v1":
+        raise ValueError(stale)
+    keys = sorted(g.key for g in goals)
+    try:
+        records = {t: SnapshotFit.model_validate(v) for t, v in raw["needs"].items()}
+    except ValidationError as exc:
+        raise ValueError(f"fit_snapshot.json: {exc}") from exc
+    needs = {n.title: n for n in session.exec(select(Need)).all()}
+    unknown = [t for t in records if t not in needs]
+    if unknown:
+        raise ValueError(f"fit_snapshot.json names needs the seed doesn't create: {unknown[:3]}")
+    for title, rec in records.items():
+        if sorted(r.goal for r in rec.ratings) != keys:
+            raise ValueError(f"fit_snapshot.json: {title!r} doesn't rate each goal once")
+        need = needs[title]
+        assert need.id is not None
+        run_ids: list[int] = []
+        for fr in rec.runs:
+            run = AIRun(need_id=need.id, **fr.model_dump())
+            session.add(run)
+            session.flush()
+            assert run.id is not None
+            run_ids.append(run.id)
+        source = "\n".join(fit_texts(session, need.id))
+        for g in rec.ratings:
+            kept, dropped = verify_quotes([g.quote], source) if g.quote.strip() else ([], 0)
+            session.add(
+                GoalRating(
+                    need_id=need.id,
+                    ai_run_id=run_ids[-1],
+                    goal=g.goal,
+                    rating=g.rating,
+                    rationale=g.rationale,
+                    quote=kept[0] if kept else None,
+                    quote_dropped=bool(dropped),
+                )
+            )
+        need.fit_run_id, need.fit_status, need.fit_goals_digest = run_ids[-1], "rated", raw["goals_digest"]
+        need.fit_accounts = account_count(session, need.id)
+        session.add(need)
+    session.commit()
+    return len(records)
 
 
 def main() -> None:
@@ -305,7 +381,9 @@ def main() -> None:
         print(
             f"Seeded {engine.url}: {counts['accounts']} accounts, {counts['requesters']} requesters, "
             f"{counts['requests']} requests processed from snapshot.json (recorded Haiku 4.5 output), "
-            f"{counts['needs']} needs, {counts['ai_runs']} AI runs"
+            f"{counts['needs']} needs, {counts['ai_runs']} AI runs; strategic fit recorded for "
+            f"{counts['fit_ratings']} needs"
+            + ("" if counts["fit_ratings"] else " (no fit_snapshot.json yet: unrated)")
         )
 
 

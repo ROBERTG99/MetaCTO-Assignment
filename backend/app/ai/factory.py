@@ -29,11 +29,13 @@ def build_deps(engine: Engine, config: Path = CONFIG) -> Deps:
         if live
         else OfflineClient()
     )
+    priorities = load_priorities(config / "priorities.yaml")
     steps = {
         "extract": StepConfig(model[llm["models"]["extract"]] if live else "offline-baseline", 2000),
         "adjudicate": StepConfig(
             model[llm["models"]["adjudicate"]], 4000, llm.get("effort", {}).get("adjudicate")
         ),
+        "strategic_fit": StepConfig(model[priorities.fit_model], 1500),
     }
     prices = yaml.safe_load((config / "prices.yaml").read_text(encoding="utf-8"))
     gateway = Gateway(client=client, steps=steps, prices=prices, record=recorder(engine))
@@ -41,7 +43,7 @@ def build_deps(engine: Engine, config: Path = CONFIG) -> Deps:
         gateway=gateway,
         search=NeedSearch(FastEmbedder()),
         routing=load_routing(routing_file),
-        priorities=load_priorities(config / "priorities.yaml"),
+        priorities=priorities,
         mode="llm" if live else "baseline",
         baseline=load_thresholds(routing_file),
     )

@@ -1,4 +1,4 @@
-.PHONY: setup dev-api test lint typecheck check check-hooks seed seed-raw seed-live openapi eval-offline eval-tune eval eval-compare snapshot
+.PHONY: setup dev-api test lint typecheck check check-hooks seed seed-raw seed-live openapi rank eval-offline eval-tune eval eval-compare eval-fit-report snapshot
 
 BACKEND := cd backend &&
 
@@ -34,10 +34,15 @@ seed:
 seed-raw:
 	$(BACKEND) uv run python -m seed.load --raw
 
-# Paid: reset to the seed with a curated backlog and run REFS through the live pipeline (settings ask first)
+# Paid: reset to the seed with a curated backlog and run REFS through the live pipeline (settings ask first).
+# About 2 calls per request plus 1 strategic-fit call per need touched (see seed/live.py)
 REFS ?= R22,R13,R07
 seed-live:
 	$(BACKEND) AI_MODE=live HF_HUB_OFFLINE=1 uv run python -m seed.live --refs $(REFS)
+
+# Free: print the priority ranking of the local database (PRIORITIES=path/to/priorities.yaml to try other weights)
+rank:
+	$(BACKEND) uv run python -m app.rank $(if $(PRIORITIES),--config $(abspath $(PRIORITIES)))
 
 # Write backend/openapi.json without starting the server
 openapi:
@@ -55,10 +60,20 @@ eval-offline:
 eval-tune:
 	$(EVAL) --split dev --tune
 
-# Paid: LLM strategies on dev and test (settings ask first). Replies are cached in evals/results/llm_cache.jsonl
+# Paid (settings ask first). STEP=routing: LLM strategies on dev and test, cached in evals/results/llm_cache.jsonl.
+# STEP=fit: strategic_fit_v1 on the seeded needs and the labelled cases, cached in evals/results/fit_cache.jsonl.
+STEP ?= routing
 STRATEGIES ?= haiku,sonnet,sonnet-low
 eval:
+ifeq ($(STEP),fit)
+	cd backend && EVAL_ALLOW_PAID=1 PYTHONPATH=.. HF_HUB_OFFLINE=1 uv run python -m evals.fit --paid
+else
 	cd backend && EVAL_ALLOW_PAID=1 PYTHONPATH=.. HF_HUB_OFFLINE=1 uv run python -m evals.llm --strategies $(STRATEGIES)
+endif
+
+# Free: rebuild evals/results/strategic_fit.md and backend/seed/fit_snapshot.json from the fit cache (a miss writes nothing)
+eval-fit-report:
+	cd backend && PYTHONPATH=.. HF_HUB_OFFLINE=1 uv run python -m evals.fit
 
 # Free: rebuild the strategy comparison (evals/results/comparison.md) from cached outcomes
 eval-compare:

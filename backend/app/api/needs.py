@@ -3,6 +3,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, Path, Query, Request, Response
 from sqlmodel import Session
 
+from app.ai.pipeline import Deps
+from app.api.deps import get_deps
 from app.db import get_session
 from app.models import NeedStatus, Segment
 from app.schemas import (
@@ -34,6 +36,7 @@ def list_needs(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     session: Session = Depends(get_session),
+    deps: Deps = Depends(get_deps),
 ) -> NeedPage:
     return service.list_needs(
         session,
@@ -44,6 +47,7 @@ def list_needs(
         sort=sort,
         page=page,
         page_size=page_size,
+        cfg=deps.priorities,
     )
 
 
@@ -65,8 +69,10 @@ def similar_needs(
     response_model=NeedDetail,
     responses={404: {"model": ErrorResponse}, 422: {"model": ErrorResponse}},
 )
-def get_need(need_id: int = NeedId, session: Session = Depends(get_session)) -> NeedDetail:
-    return service.get_need(session, need_id)
+def get_need(
+    need_id: int = NeedId, session: Session = Depends(get_session), deps: Deps = Depends(get_deps)
+) -> NeedDetail:
+    return service.get_need(session, need_id, deps.priorities)
 
 
 @router.post(

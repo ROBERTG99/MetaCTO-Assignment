@@ -617,6 +617,28 @@
           }
         }
       }
+    },
+    "/insights/quadrant": {
+      "get": {
+        "tags": [
+          "insights"
+        ],
+        "summary": "Undecided needs by popularity and strategic fit",
+        "description": "Popular is revenue-weighted demand (D), strategic is the goal-weighted fit (S); cut-offs come from config/priorities.yaml. Needs whose fit isn't rated yet are listed apart.",
+        "operationId": "quadrant_insights_quadrant_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuadrantView"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -746,6 +768,60 @@
         ],
         "title": "DecisionResult"
       },
+      "DemandOut": {
+        "properties": {
+          "value": {
+            "type": "number",
+            "title": "Value",
+            "description": "D, 0-1: log-scaled weighted revenue over unique accounts"
+          },
+          "revenue": {
+            "type": "number",
+            "title": "Revenue",
+            "description": "R: ARR x segment weight (customers) + p_win x pipeline x segment weight"
+          },
+          "customer_revenue": {
+            "type": "number",
+            "title": "Customer Revenue"
+          },
+          "prospect_revenue": {
+            "type": "number",
+            "title": "Prospect Revenue"
+          },
+          "accounts": {
+            "type": "integer",
+            "title": "Accounts"
+          },
+          "customers": {
+            "type": "integer",
+            "title": "Customers"
+          },
+          "prospects": {
+            "type": "integer",
+            "title": "Prospects"
+          },
+          "gaps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Gaps",
+            "description": "Accounts counted with no ARR or pipeline value on record"
+          }
+        },
+        "type": "object",
+        "required": [
+          "value",
+          "revenue",
+          "customer_revenue",
+          "prospect_revenue",
+          "accounts",
+          "customers",
+          "prospects",
+          "gaps"
+        ],
+        "title": "DemandOut"
+      },
       "ErrorDetail": {
         "properties": {
           "field": {
@@ -837,6 +913,80 @@
         ],
         "title": "FailedRequest"
       },
+      "GoalRatingOut": {
+        "properties": {
+          "goal": {
+            "type": "string",
+            "title": "Goal"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "weight": {
+            "type": "number",
+            "title": "Weight",
+            "description": "From config/priorities.yaml now, not when the rating was made"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating",
+            "description": "0-3, rated by the model"
+          },
+          "contribution": {
+            "type": "number",
+            "title": "Contribution",
+            "description": "weight x rating / 3"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote",
+            "description": "Verified verbatim in the need's requests"
+          },
+          "quote_dropped": {
+            "type": "boolean",
+            "title": "Quote Dropped",
+            "description": "The model quoted text that isn't in the requests; it was dropped"
+          }
+        },
+        "type": "object",
+        "required": [
+          "goal",
+          "title",
+          "weight",
+          "rating",
+          "contribution",
+          "rationale",
+          "quote",
+          "quote_dropped"
+        ],
+        "title": "GoalRatingOut"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -890,15 +1040,12 @@
             "$ref": "#/components/schemas/NeedStatus"
           },
           "priority_score": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Priority Score"
+            "type": "number",
+            "title": "Priority Score",
+            "description": "0-100, computed when read from current data and config"
+          },
+          "breakdown": {
+            "$ref": "#/components/schemas/PriorityBreakdown"
           },
           "support_count": {
             "type": "integer",
@@ -957,39 +1104,6 @@
             ],
             "title": "Merged Into Id"
           },
-          "demand": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Demand"
-          },
-          "urgency": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Urgency"
-          },
-          "strategic_fit": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Strategic Fit"
-          },
           "requests": {
             "items": {
               "$ref": "#/components/schemas/NeedRequestOut"
@@ -1021,6 +1135,7 @@
           "product_area",
           "status",
           "priority_score",
+          "breakdown",
           "support_count",
           "claimed_support_count",
           "request_count",
@@ -1029,9 +1144,6 @@
           "created_at",
           "job_to_be_done",
           "merged_into_id",
-          "demand",
-          "urgency",
-          "strategic_fit",
           "requests",
           "supports",
           "accounts"
@@ -1222,15 +1334,12 @@
             "$ref": "#/components/schemas/NeedStatus"
           },
           "priority_score": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Priority Score"
+            "type": "number",
+            "title": "Priority Score",
+            "description": "0-100, computed when read from current data and config"
+          },
+          "breakdown": {
+            "$ref": "#/components/schemas/PriorityBreakdown"
           },
           "support_count": {
             "type": "integer",
@@ -1277,6 +1386,7 @@
           "product_area",
           "status",
           "priority_score",
+          "breakdown",
           "support_count",
           "claimed_support_count",
           "request_count",
@@ -1285,6 +1395,193 @@
           "created_at"
         ],
         "title": "NeedSummary"
+      },
+      "PriorityBreakdown": {
+        "properties": {
+          "priority": {
+            "type": "number",
+            "title": "Priority",
+            "description": "0-100, the sum of contributions"
+          },
+          "contributions": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Contributions",
+            "description": "Points per component: 100 x weight x value"
+          },
+          "weights": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Weights",
+            "description": "Weights used; renormalised while strategic is unrated"
+          },
+          "demand": {
+            "$ref": "#/components/schemas/DemandOut"
+          },
+          "urgency": {
+            "$ref": "#/components/schemas/UrgencyOut"
+          },
+          "strategic": {
+            "$ref": "#/components/schemas/StrategicOut"
+          },
+          "quadrant": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "clear_win",
+                  "strategic_bet",
+                  "popular_off_strategy",
+                  "park"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quadrant",
+            "description": "Popular is demand, strategic is S; null while unrated"
+          },
+          "owner": {
+            "type": "string",
+            "title": "Owner",
+            "description": "The PM team that owns the product area"
+          }
+        },
+        "type": "object",
+        "required": [
+          "priority",
+          "contributions",
+          "weights",
+          "demand",
+          "urgency",
+          "strategic",
+          "quadrant",
+          "owner"
+        ],
+        "title": "PriorityBreakdown"
+      },
+      "QuadrantNeed": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "product_area": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Area"
+          },
+          "owner": {
+            "type": "string",
+            "title": "Owner"
+          },
+          "priority": {
+            "type": "number",
+            "title": "Priority"
+          },
+          "demand": {
+            "type": "number",
+            "title": "Demand"
+          },
+          "strategic": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategic"
+          },
+          "account_count": {
+            "type": "integer",
+            "title": "Account Count"
+          },
+          "quadrant": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "clear_win",
+                  "strategic_bet",
+                  "popular_off_strategy",
+                  "park"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quadrant"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "product_area",
+          "owner",
+          "priority",
+          "demand",
+          "strategic",
+          "account_count",
+          "quadrant"
+        ],
+        "title": "QuadrantNeed"
+      },
+      "QuadrantView": {
+        "properties": {
+          "cutoffs": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Cutoffs",
+            "description": "Inclusive cut-offs from config/priorities.yaml"
+          },
+          "quadrants": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/QuadrantNeed"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Quadrants",
+            "description": "clear_win, strategic_bet, popular_off_strategy, park; highest priority first"
+          },
+          "not_rated": {
+            "items": {
+              "$ref": "#/components/schemas/QuadrantNeed"
+            },
+            "type": "array",
+            "title": "Not Rated",
+            "description": "Strategic fit not rated yet (pending, failed or offline)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cutoffs",
+          "quadrants",
+          "not_rated"
+        ],
+        "title": "QuadrantView"
       },
       "RequestCreate": {
         "properties": {
@@ -1553,6 +1850,113 @@
           "score"
         ],
         "title": "SimilarNeed"
+      },
+      "StrategicOut": {
+        "properties": {
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value",
+            "description": "S, 0-1; null until every configured goal is rated"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "rated",
+              "stale",
+              "pending",
+              "failed",
+              "not_rated"
+            ],
+            "title": "Status",
+            "description": "stale: rated against goals that have changed since; re-rated on the next support change"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Version"
+          },
+          "ai_run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Run Id"
+          },
+          "rated_at_accounts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rated At Accounts"
+          },
+          "rerating_queued": {
+            "type": "boolean",
+            "title": "Rerating Queued"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "goals": {
+            "items": {
+              "$ref": "#/components/schemas/GoalRatingOut"
+            },
+            "type": "array",
+            "title": "Goals"
+          }
+        },
+        "type": "object",
+        "required": [
+          "value",
+          "status",
+          "model",
+          "prompt_version",
+          "ai_run_id",
+          "rated_at_accounts",
+          "rerating_queued",
+          "error",
+          "goals"
+        ],
+        "title": "StrategicOut"
       },
       "SupportCreate": {
         "properties": {
@@ -1925,6 +2329,50 @@
           "title"
         ],
         "title": "UnlinkResult"
+      },
+      "UrgencyOut": {
+        "properties": {
+          "value": {
+            "type": "number",
+            "title": "Value",
+            "description": "U, 0-1: highest severity, plus a renewal within the window"
+          },
+          "max_severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Severity"
+          },
+          "severity_score": {
+            "type": "number",
+            "title": "Severity Score"
+          },
+          "renewal_soon": {
+            "type": "boolean",
+            "title": "Renewal Soon"
+          },
+          "renewing_accounts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Renewing Accounts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "value",
+          "max_severity",
+          "severity_score",
+          "renewal_soon",
+          "renewing_accounts"
+        ],
+        "title": "UrgencyOut"
       },
       "ValidationError": {
         "properties": {

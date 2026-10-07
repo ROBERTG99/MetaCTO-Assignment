@@ -34,9 +34,12 @@ from app.schemas import (
     NeedRequestOut,
     NeedSort,
     NeedSummary,
+    PriorityBreakdown,
     SupportCreate,
     SupportOut,
 )
+from app.scoring import PrioritiesConfig, rank_key
+from app.services import priority
 from app.services.requests import get_requester
 
 
@@ -82,7 +85,7 @@ def _stats(session: Session, need_ids: list[int]) -> dict[int, _Stats]:
     return stats
 
 
-def _summary(need: Need, s: _Stats) -> NeedSummary:
+def _summary(need: Need, s: _Stats, b: PriorityBreakdown) -> NeedSummary:
     assert need.id is not None
     return NeedSummary(
         id=need.id,
@@ -91,7 +94,8 @@ def _summary(need: Need, s: _Stats) -> NeedSummary:
         persona=need.persona,
         product_area=need.product_area,
         status=need.status,
-        priority_score=need.priority_score,
+        priority_score=b.priority,
+        breakdown=b,
         support_count=len(s.supporters),
         claimed_support_count=s.claimed,
         request_count=s.requests,
@@ -111,6 +115,7 @@ def list_needs(
     sort: NeedSort,
     page: int,
     page_size: int,
+    cfg: PrioritiesConfig,
 ) -> NeedPage:
     query = select(Need)
     query = query.where(Need.status == status) if status else query.where(Need.status != NeedStatus.merged)
@@ -148,9 +153,10 @@ def list_needs(
         query = query.where(or_(via_request, via_support))
     needs = list(session.exec(query).all())
     stats = _stats(session, [n.id for n in needs if n.id is not None])
-    items = [_summary(n, stats[n.id]) for n in needs if n.id is not None]
+    bds = priority.breakdowns(session, needs, cfg)
+    items = [_summary(n, stats[n.id], bds[n.id]) for n in needs if n.id is not None]
     if sort == "priority":
-        items.sort(key=lambda n: (n.priority_score is None, -(n.priority_score or 0.0), n.id))
+        items.sort(key=lambda n: rank_key(n.priority_score, n.breakdown.demand.accounts, n.id))
     elif sort == "support":
         items.sort(key=lambda n: (-n.support_count, n.id))
     else:  # recent: newest member request first; needs without requests use their creation time
@@ -159,11 +165,12 @@ def list_needs(
     return NeedPage(items=items[start : start + page_size], total=len(items), page=page, page_size=page_size)
 
 
-def get_need(session: Session, need_id: int) -> NeedDetail:
+def get_need(session: Session, need_id: int, cfg: PrioritiesConfig) -> NeedDetail:
     need = session.get(Need, need_id)
     if need is None:
         raise not_found("Need", need_id)
     stats = _stats(session, [need_id])[need_id]
+    b = priority.breakdowns(session, [need], cfg)[need_id]
     accounts = {a.id: a for a in session.exec(select(Account)).all()}
     people = {r.id: r for r in session.exec(select(Requester)).all()}
 
@@ -177,12 +184,9 @@ def get_need(session: Session, need_id: int) -> NeedDetail:
         select(Support).where(Support.need_id == need_id).order_by(col(Support.created_at))
     ).all()
     return NeedDetail(
-        **_summary(need, stats).model_dump(),
+        **_summary(need, stats, b).model_dump(),
         job_to_be_done=need.job_to_be_done,
         merged_into_id=need.merged_into_id,
-        demand=need.demand,
-        urgency=need.urgency,
-        strategic_fit=need.strategic_fit,
         requests=[
             NeedRequestOut(
                 id=r.id,

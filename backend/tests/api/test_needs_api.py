@@ -20,11 +20,9 @@ def backlog(make: Factory) -> dict[str, Any]:
         make.requester(smb, "Cy", "Owner"),
     )
 
-    sso = make.need("IT admins need SSO before rollout", product_area="security", priority_score=80.0)
-    excel = make.need("Finance needs month-end data in Excel", product_area="reporting", priority_score=55.0)
-    dark = make.need(
-        "SMB users want a dark theme", product_area="ui", priority_score=None, status=NeedStatus.planned
-    )
+    sso = make.need("IT admins need SSO before rollout", product_area="security")
+    excel = make.need("Finance needs month-end data in Excel", product_area="reporting")
+    dark = make.need("SMB users want a dark theme", product_area="ui", status=NeedStatus.planned)
     gone = make.need("Old duplicate of SSO", product_area="security", status=NeedStatus.merged)
 
     make.request(ana, sso, "Okta SSO please", created_at=days_ago(30))
@@ -69,7 +67,7 @@ def test_sorts_by_priority_support_and_recency(client: TestClient, backlog: dict
     assert titles(client.get("/needs", params={"sort": "priority"})) == [
         "IT admins need SSO before rollout",
         "Finance needs month-end data in Excel",
-        "SMB users want a dark theme",  # unscored needs last
+        "SMB users want a dark theme",  # computed: D from 3k ARR only
     ]
     by_support = client.get("/needs", params={"sort": "support"}).json()["items"]
     assert by_support[0]["title"] == "IT admins need SSO before rollout"

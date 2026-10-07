@@ -17,8 +17,19 @@ from app.ai.pipeline import Deps
 from app.ai.policy import RoutingConfig
 from app.db import create_tables, make_engine
 from app.main import create_app
-from app.models import Account, Need, Request, Requester, RequestSource, Segment, Support, SupportLinkStatus
-from app.scoring import PrioritiesConfig
+from app.models import (
+    Account,
+    AIRun,
+    GoalRating,
+    Need,
+    Request,
+    Requester,
+    RequestSource,
+    Segment,
+    Support,
+    SupportLinkStatus,
+)
+from app.scoring import PrioritiesConfig, goals_digest
 
 
 @pytest.fixture
@@ -45,6 +56,7 @@ def deps(engine: Engine, fake_llm: FakeLLM) -> Deps:
     steps = {
         "extract": StepConfig("claude-haiku-4-5", 2000),
         "adjudicate": StepConfig("claude-sonnet-5-5", 4000, "low"),
+        "strategic_fit": StepConfig("claude-haiku-4-5", 1500),
     }
     prices = {
         "claude-haiku-4-5": {"input": 1.0, "output": 5.0},
@@ -116,6 +128,20 @@ class Factory:
         return self._save(  # type: ignore[no-any-return]
             Support(need_id=need.id, requester_id=requester.id, link_status=status, **kw)
         )
+
+    def rating(
+        self, need: Need, ratings: dict[str, int], accounts: int = 1, quote: str | None = None
+    ) -> AIRun:
+        """A finished strategic-fit run with one rating per goal, in use by the need."""
+        run = self._save(AIRun(step="strategic_fit", model="claude-haiku-4-5", prompt_version="strategic_fit_v1",
+                               outcome="ok", need_id=need.id))  # fmt: skip
+        for goal, value in ratings.items():
+            self.s.add(GoalRating(need_id=need.id, ai_run_id=run.id, goal=goal, rating=value,  # type: ignore[arg-type]
+                                  rationale=f"{goal} rated {value}", quote=quote))  # fmt: skip
+        need.fit_status, need.fit_run_id, need.fit_accounts = "rated", run.id, accounts
+        need.fit_goals_digest = goals_digest(PrioritiesConfig().goals)
+        self._save(need)
+        return run  # type: ignore[no-any-return]
 
 
 @pytest.fixture

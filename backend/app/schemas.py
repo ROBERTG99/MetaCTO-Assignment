@@ -111,6 +111,68 @@ class NeedRequestOut(BaseModel):
     created_at: datetime
 
 
+class DemandOut(BaseModel):
+    value: float = Field(description="D, 0-1: log-scaled weighted revenue over unique accounts")
+    revenue: float = Field(
+        description="R: ARR x segment weight (customers) + p_win x pipeline x segment weight"
+    )
+    customer_revenue: float
+    prospect_revenue: float
+    accounts: int
+    customers: int
+    prospects: int
+    gaps: list[str] = Field(description="Accounts counted with no ARR or pipeline value on record")
+
+
+class UrgencyOut(BaseModel):
+    value: float = Field(description="U, 0-1: highest severity, plus a renewal within the window")
+    max_severity: str | None
+    severity_score: float
+    renewal_soon: bool
+    renewing_accounts: list[str]
+
+
+class GoalRatingOut(BaseModel):
+    goal: str
+    title: str
+    weight: float = Field(description="From config/priorities.yaml now, not when the rating was made")
+    rating: int | None = Field(description="0-3, rated by the model")
+    contribution: float = Field(description="weight x rating / 3")
+    rationale: str | None
+    quote: str | None = Field(description="Verified verbatim in the need's requests")
+    quote_dropped: bool = Field(
+        description="The model quoted text that isn't in the requests; it was dropped"
+    )
+
+
+class StrategicOut(BaseModel):
+    value: float | None = Field(description="S, 0-1; null until every configured goal is rated")
+    status: Literal["rated", "stale", "pending", "failed", "not_rated"] = Field(
+        description="stale: rated against goals that have changed since; re-rated on the next support change"
+    )
+    model: str | None
+    prompt_version: str | None
+    ai_run_id: int | None
+    rated_at_accounts: int | None
+    rerating_queued: bool
+    error: str | None
+    goals: list[GoalRatingOut]
+
+
+Quadrant = Literal["clear_win", "strategic_bet", "popular_off_strategy", "park"]
+
+
+class PriorityBreakdown(BaseModel):
+    priority: float = Field(description="0-100, the sum of contributions")
+    contributions: dict[str, float] = Field(description="Points per component: 100 x weight x value")
+    weights: dict[str, float] = Field(description="Weights used; renormalised while strategic is unrated")
+    demand: DemandOut
+    urgency: UrgencyOut
+    strategic: StrategicOut
+    quadrant: Quadrant | None = Field(description="Popular is demand, strategic is S; null while unrated")
+    owner: str = Field(description="The PM team that owns the product area")
+
+
 class NeedSummary(BaseModel):
     id: int
     title: str
@@ -118,7 +180,8 @@ class NeedSummary(BaseModel):
     persona: str | None
     product_area: str | None
     status: NeedStatus
-    priority_score: float | None
+    priority_score: float = Field(description="0-100, computed when read from current data and config")
+    breakdown: PriorityBreakdown
     support_count: int = Field(
         description="Distinct requesters with a member request or a confirmed support. Staff filing for several "
         "customers count once; account_count shows the customers."
@@ -142,9 +205,6 @@ class NeedPage(BaseModel):
 class NeedDetail(NeedSummary):
     job_to_be_done: str | None
     merged_into_id: int | None
-    demand: float | None
-    urgency: float | None
-    strategic_fit: float | None
     requests: list[NeedRequestOut]
     supports: list[SupportOut]
     accounts: list[AccountOut]
@@ -225,3 +285,25 @@ class SimilarNeed(BaseModel):
     product_area: str | None
     status: NeedStatus
     score: float
+
+
+class QuadrantNeed(BaseModel):
+    id: int
+    title: str
+    product_area: str | None
+    owner: str
+    priority: float
+    demand: float
+    strategic: float | None
+    account_count: int
+    quadrant: Quadrant | None
+
+
+class QuadrantView(BaseModel):
+    cutoffs: dict[str, float] = Field(description="Inclusive cut-offs from config/priorities.yaml")
+    quadrants: dict[str, list[QuadrantNeed]] = Field(
+        description="clear_win, strategic_bet, popular_off_strategy, park; highest priority first"
+    )
+    not_rated: list[QuadrantNeed] = Field(
+        description="Strategic fit not rated yet (pending, failed or offline)"
+    )

@@ -30,6 +30,7 @@ from app.ai.retrieval import Hit
 from app.ai.schemas import Adjudication, CandidateNeed, Extraction
 from app.models import (
     AISuggestion,
+    GoalRating,
     LinkAction,
     LinkActor,
     LinkEvent,
@@ -44,7 +45,8 @@ from app.models import (
     SupportLinkStatus,
     utcnow,
 )
-from app.scoring import PrioritiesConfig, refresh_need
+from app.scoring import PrioritiesConfig, goals_digest
+from app.services.priority import account_count, queue_fit_if_due
 
 log = logging.getLogger("distill.pipeline")
 
@@ -317,7 +319,7 @@ def process_request(session: Session, request_id: int, deps: Deps) -> str:
                 )
             )
     if r.need_id is not None:
-        refresh_need(session, r.need_id, deps.priorities)
+        queue_fit_if_due(session, r.need_id, deps.priorities)
     r.status, r.processed_at = RequestStatus.processed, utcnow()
     session.add(r)
     session.commit()
@@ -409,7 +411,7 @@ def process_claim(session: Session, support_id: int, deps: Deps) -> str:
             )
         )
         session.flush()
-        refresh_need(session, sup.need_id, deps.priorities)
+        queue_fit_if_due(session, sup.need_id, deps.priorities)
         session.commit()
         return "confirmed"
     dispute_claim(
@@ -422,3 +424,70 @@ def process_claim(session: Session, support_id: int, deps: Deps) -> str:
     )
     session.commit()
     return "disputed"
+
+
+FIT_MAX_TEXTS, FIT_MAX_CHARS = 8, 1500
+
+
+def fit_texts(session: Session, need_id: int) -> list[str]:
+    """What the strategic-fit step reads: member requests, then confirmed supporters' reasons, oldest first,
+    redacted and capped. Never who wrote them (role, account, segment, revenue): fit is judged on the problem."""
+    members = session.exec(
+        select(Request).where(Request.need_id == need_id).order_by(col(Request.created_at), col(Request.id))
+    ).all()
+    whys = session.exec(
+        select(Support.why_it_matters)
+        .where(Support.need_id == need_id, Support.link_status == SupportLinkStatus.confirmed)
+        .order_by(col(Support.created_at), col(Support.id))
+    ).all()
+    texts = [r.redacted_text or redact(f"{r.title}\n{r.description}") for r in members]
+    texts += [redact(w) for w in whys if w and w.strip()]
+    return [t.strip()[:FIT_MAX_CHARS] for t in texts if t.strip()][:FIT_MAX_TEXTS]
+
+
+def process_fit(session: Session, need_id: int, deps: Deps) -> str:
+    """Rate a need against each goal (strategic_fit_v1) and point the need at the new ratings.
+
+    One GoalRating row per goal; a quote not found in the requests the model was given is dropped and flagged.
+    S itself is never stored: it is computed with the current goal weights when the need is read (ADR 0009).
+    """
+    need = session.get(Need, need_id)
+    if need is None:
+        raise ValueError(f"need {need_id} not found")
+    if need.status == NeedStatus.merged and need.fit_status == "pending":  # merged while it waited
+        need.fit_status = None
+        session.add(need)
+        session.commit()
+    if need.fit_status != "pending":
+        return "done"
+    texts = fit_texts(session, need_id)
+    out, run_id = deps.gateway.rate_fit(
+        title=need.title,
+        problem=need.problem or need.title,
+        persona=need.persona,
+        job_to_be_done=need.job_to_be_done,
+        requests=texts,
+        goals=deps.priorities.goals,
+        need_id=need_id,
+    )
+    source = "\n".join(texts)
+    for r in out.ratings:
+        kept, dropped = verify_quotes([r.quote], source) if r.quote.strip() else ([], 0)
+        session.add(
+            GoalRating(
+                need_id=need_id,
+                ai_run_id=run_id,
+                goal=r.goal,
+                rating=r.rating,
+                rationale=r.rationale,
+                quote=kept[0] if kept else None,
+                quote_dropped=bool(dropped),
+            )
+        )
+    need.fit_run_id, need.fit_status, need.fit_error = run_id, "rated", None
+    need.fit_goals_digest = goals_digest(deps.priorities.goals)
+    need.fit_accounts = account_count(session, need_id)
+    need.updated_at = utcnow()
+    session.add(need)
+    session.commit()
+    return "rated"

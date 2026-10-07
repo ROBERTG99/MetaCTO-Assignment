@@ -3,7 +3,8 @@
 The database is reset to the seed, the curated backlog is built from ground_truth.json (17 needs, their
 requests linked), and only the chosen requests are left pending. The worker then processes them with
 AI_MODE=live, and their AIRun rows are printed. Each request makes 2 calls (extract + adjudicate), plus at
-most one repair or max_tokens retry per call.
+most one repair or max_tokens retry per call. Each need a request creates or links to then gets a strategic-fit
+rating (1 Haiku call, about $0.004), because the curated backlog's needs have never been rated.
 """
 
 import argparse
@@ -86,7 +87,8 @@ def main() -> None:
         total = 0.0
         for run in session.exec(select(AIRun).order_by(AIRun.id)).all():  # type: ignore[arg-type]
             total += run.cost_usd
-            print(f"  #{run.id} request={run.request_id} {run.step:<10} {run.model:<18} {run.prompt_version:<16} "
+            ref_ = f"request={run.request_id}" if run.request_id else f"need={run.need_id}"
+            print(f"  #{run.id} {ref_} {run.step:<13} {run.model:<18} {run.prompt_version:<16} "
                   f"in={run.input_tokens:>5} out={run.output_tokens:>5} ${run.cost_usd:.5f} {run.latency_ms:>6} ms {run.outcome}"
                   + (f" ({run.error})" if run.error else ""))  # fmt: skip
         print(f"  total ${total:.4f}")

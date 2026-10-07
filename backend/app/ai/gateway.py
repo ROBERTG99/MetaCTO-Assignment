@@ -8,7 +8,7 @@ validation repair, maps provider failures to TransientError or TerminalError, an
 import html
 import re
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar, Protocol, TypeVar
@@ -16,8 +16,9 @@ from typing import Any, ClassVar, Protocol, TypeVar
 from pydantic import BaseModel, ValidationError
 
 from app.ai.redact import redact
-from app.ai.schemas import Adjudication, CandidateNeed, Extraction, ProductArea
+from app.ai.schemas import Adjudication, CandidateNeed, Extraction, FitRating, ProductArea, StrategicFit
 from app.models import AIRun
+from app.scoring import Goal
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -147,6 +148,12 @@ class FakeLLM:
             )  # fmt: skip
         if step == "adjudicate":
             return Adjudication(judgments=[])  # no judgment means "different" for every candidate
+        if step == "strategic_fit":
+            return StrategicFit(
+                ratings=[
+                    FitRating(goal=g["key"], rating=1, rationale="fake", quote="") for g in inputs["goals"]
+                ]
+            )
         raise ValueError(f"no default for step {step}")
 
 
@@ -159,7 +166,12 @@ class StepConfig:
 
 Recorder = Callable[[AIRun], int]
 PROMPTS = Path(__file__).resolve().parent / "prompts"
-PROMPT_FOR_STEP = {"extract": "extract_need_v1", "adjudicate": "adjudicate_v1"}
+PROMPT_FOR_STEP = {
+    "extract": "extract_need_v1",
+    "adjudicate": "adjudicate_v1",
+    "strategic_fit": "strategic_fit_v1",
+}
+Check = Callable[[BaseModel], str | None]  # a problem the schema can't express, or None
 PLACEHOLDER = re.compile(r"\{\{(\w+)\}\}")
 
 
@@ -249,6 +261,54 @@ class Gateway:
         assert isinstance(out, Adjudication)
         return out, run_id
 
+    def rate_fit(
+        self,
+        *,
+        title: str,
+        problem: str,
+        persona: str | None,
+        job_to_be_done: str | None,
+        requests: list[str],
+        goals: Sequence[Goal],
+        need_id: int | None = None,
+    ) -> tuple[StrategicFit, int]:
+        """Rate one need against each goal. Who asked is not a parameter: fit is judged on the problem."""
+        goal_blocks = "\n".join(
+            f'<goal key="{html.escape(g.key)}">\ntitle: {html.escape(g.title)}\n'
+            f"description: {html.escape(g.description)}\n</goal>"
+            for g in goals
+        )
+        need = (
+            f"title: {_data(title)}\nproblem: {_data(problem)}\npersona: {_data(persona or 'unknown')}\n"
+            f"job_to_be_done: {_data(job_to_be_done or 'unknown')}"
+        )
+        texts = "\n".join(f'<request n="{i}">\n{_data(t)}\n</request>' for i, t in enumerate(requests, 1))
+        values = {"goals": goal_blocks, "need": need, "requests": texts or "none yet"}
+        inputs = {
+            "need": {
+                "title": title,
+                "problem": problem,
+                "persona": persona,
+                "job_to_be_done": job_to_be_done,
+            },
+            "requests": requests,
+            "goals": [{"key": g.key, "title": g.title, "description": g.description} for g in goals],
+        }
+        keys = [g.key for g in goals]
+
+        def every_goal_once(out: BaseModel) -> str | None:
+            assert isinstance(out, StrategicFit)
+            got = [r.goal for r in out.ratings]
+            if sorted(got) != sorted(keys):
+                return f"rate each of these goals exactly once: {', '.join(keys)} (got: {', '.join(got) or 'none'})"
+            return None
+
+        out, run_id = self._call(
+            "strategic_fit", StrategicFit, values, inputs, None, need_id, every_goal_once
+        )
+        assert isinstance(out, StrategicFit)
+        return out, run_id
+
     def _prompt(self, step: str) -> Prompt:
         name = PROMPT_FOR_STEP[step]
         if name not in self._prompts:
@@ -268,7 +328,7 @@ class Gateway:
         return (usage.input_tokens * price["input"] + usage.output_tokens * price["output"]) / 1_000_000
 
     def _run(self, step: str, prompt: Prompt, model: str, outcome: str, started: float, request_id: int | None,
-             usage: Usage | None = None, error: str | None = None) -> int:  # fmt: skip
+             usage: Usage | None = None, error: str | None = None, need_id: int | None = None) -> int:  # fmt: skip
         usage = usage or Usage(0, 0)
         return self.record(
             AIRun(
@@ -282,6 +342,7 @@ class Gateway:
                 outcome=outcome,
                 error=error[:500] if error else None,
                 request_id=request_id,
+                need_id=need_id,
             )
         )
 
@@ -292,6 +353,8 @@ class Gateway:
         values: dict[str, str],
         inputs: dict[str, Any],
         request_id: int | None,
+        need_id: int | None = None,
+        check: Check | None = None,
     ) -> tuple[BaseModel, int]:
         """One logical call: at most one repair retry for bad output, one retry with a higher limit on max_tokens."""
         prompt, cfg = self._prompt(step), self.steps[step]
@@ -306,9 +369,20 @@ class Gateway:
                     max_tokens=max_tokens, effort=cfg.effort, inputs=inputs,
                 )  # fmt: skip
                 output = schema.model_validate(reply.output.model_dump())  # validated in our code, always
+                problem = check(output) if check else None
+                if problem:
+                    raise BadOutput(problem, reply.usage)
             except BadOutput as exc:
                 self._run(
-                    step, prompt, cfg.model, "validation_error", started, request_id, exc.usage, str(exc)
+                    step,
+                    prompt,
+                    cfg.model,
+                    "validation_error",
+                    started,
+                    request_id,
+                    exc.usage,
+                    str(exc),
+                    need_id,
                 )
                 if repaired:
                     raise TerminalError(f"{step}: output failed validation twice: {exc}") from exc
@@ -319,19 +393,49 @@ class Gateway:
                 )
                 continue
             except MaxTokens as exc:
-                self._run(step, prompt, cfg.model, "max_tokens", started, request_id, exc.usage, "max_tokens")
+                self._run(
+                    step,
+                    prompt,
+                    cfg.model,
+                    "max_tokens",
+                    started,
+                    request_id,
+                    exc.usage,
+                    "max_tokens",
+                    need_id,
+                )
                 if extended:
                     raise TerminalError(f"{step}: hit max_tokens twice") from exc
                 extended, max_tokens = True, max_tokens * 2
                 continue
             except Refused as exc:
-                self._run(step, prompt, cfg.model, "refusal", started, request_id, exc.usage, str(exc))
+                self._run(
+                    step, prompt, cfg.model, "refusal", started, request_id, exc.usage, str(exc), need_id
+                )
                 raise TerminalError(f"{step}: {exc}") from exc
             except TransientError as exc:
-                self._run(step, prompt, cfg.model, "provider_error", started, request_id, error=str(exc))
+                self._run(
+                    step,
+                    prompt,
+                    cfg.model,
+                    "provider_error",
+                    started,
+                    request_id,
+                    error=str(exc),
+                    need_id=need_id,
+                )
                 raise
             except TerminalError as exc:
-                self._run(step, prompt, cfg.model, "provider_error", started, request_id, error=str(exc))
+                self._run(
+                    step,
+                    prompt,
+                    cfg.model,
+                    "provider_error",
+                    started,
+                    request_id,
+                    error=str(exc),
+                    need_id=need_id,
+                )
                 raise
             except Exception as exc:  # anything unmapped is still recorded (rule 5), then propagates
                 self._run(
@@ -342,9 +446,12 @@ class Gateway:
                     started,
                     request_id,
                     error=f"{type(exc).__name__}: {exc}",
+                    need_id=need_id,
                 )
                 raise
-            run_id = self._run(step, prompt, reply.model, "ok", started, request_id, usage=reply.usage)
+            run_id = self._run(
+                step, prompt, reply.model, "ok", started, request_id, usage=reply.usage, need_id=need_id
+            )
             return output, run_id
 
 

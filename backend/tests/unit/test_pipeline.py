@@ -45,7 +45,7 @@ def test_auto_link_when_label_similarity_and_fields_all_agree(
     [e] = [e for e in events(db) if e.request_id == r.id]
     assert (e.actor, e.need_id, e.routing_score) == (LinkActor.auto, b.sso.id, 1.0)
     db.refresh(b.sso)
-    assert b.sso.priority_score is not None  # enriched
+    assert b.sso.fit_status == "pending"  # never rated: the link queued its strategic-fit rating
 
 
 def test_gray_zone_becomes_a_triage_suggestion(

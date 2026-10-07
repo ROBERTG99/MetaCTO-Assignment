@@ -26,7 +26,7 @@ No test calls a real model (CLAUDE.md rule 8). Unit and API tests inject FakeLLM
 | Routing score, bands, claim confirmed vs disputed, baseline through the same policy | `unit/test_routing.py` |
 | Audit sampling by `sha256(request_id) mod 10` | `unit/test_audit_sampling.py` |
 | Enrichment: account join; a missing account is scored without revenue and flagged | `unit/test_enrich.py` |
-| Demand, urgency, strategic renormalization, priority | `unit/test_scoring.py` |
+| Demand, urgency, strategic fit, priority, quadrant, owner, re-rating crossings, ties, config validation (passing) | `unit/test_scoring.py` |
 | Quote and number verifier (adjudication, strategic fit, brief, agent findings) | `unit/test_verify.py` |
 | Worker: claim, backoff, stale reclaim, needs_review after N, terminal failures go straight to needs_review, an active claim becomes disputed, one-transaction results | `unit/test_worker.py` |
 | Gateway: one ai_run per call with every field; redaction of every input; refusal is terminal; max_tokens and validation errors retried once, then terminal | `unit/test_gateway.py` |
@@ -44,7 +44,8 @@ No test calls a real model (CLAUDE.md rule 8). Unit and API tests inject FakeLLM
 | Gateway: AIRun per call, refusal terminal, one repair retry, max_tokens retry, transient errors, redaction before the client, XML tags (passing) | `unit/test_gateway.py` |
 | Pipeline with FakeLLM: auto, gray zone, new need, audit flag, prompt injection, redaction, idempotency, claims (passing) | `unit/test_pipeline.py` |
 | Worker: one at a time, attempts and last error, backoff, 3 failures to needs_review, refusal, stale reclaim, outage never fails a submission (passing) | `unit/test_worker.py` |
-| Enrichment: demand, urgency, priority (passing) | `unit/test_scoring.py` |
+| Priority on read: breakdown per need, confirmed support only, each account once, quadrant view, a config-only weight change re-ranks (passing) | `api/test_priority_api.py` |
+| Strategic fit with FakeLLM: what is sent (no requester fields, redacted, escaped), per-goal rows, quote check, coverage repair, worker retries and failure, merged and stale needs, `fit_texts` (passing) | `unit/test_strategic_fit.py` |
 | Seed data: every request labelled, clusters of two or more, references exist, the Excel split on both sides, the loader loads raw data only (passing) | `unit/test_seed_data.py` |
 | SQLite in WAL mode with foreign keys (passing) | `unit/test_db.py` |
 
@@ -126,7 +127,7 @@ Test-set composition. Robert's 17 handwritten cases (`H…`, `reviewed_by_human:
 - `make eval` prints the call count and expected cost and asks first. Results and deltas go in `evals/REPORT.md`.
 
 **Should-flow slices** (added when the flow is built):
-- Strategic fit: a small rubric set; checks that each quote is verified.
+- Strategic fit: 10 seeded needs plus one prompt-injection case, rated 0-3 per goal by Robert before any paid call (`evals/datasets/strategic_fit.jsonl`; `evals/fit.py` refuses a paid run until every case is labelled and reviewed). Reports agreement within one point, exact agreement, MAE and Spearman of S against constant and embedding baselines, plus the quote verification rate (REPORT §5). Report-only: no dev split.
 - Brief: cases with planted fabricated quotes and numbers; the verifier must flag all of them.
 - Agent: cases with known overlaps and dependencies; precision of its findings and step-cap compliance.
 - Commitment flags (F7): drafts containing promised dates or features the PM didn't make.

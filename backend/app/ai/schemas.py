@@ -71,3 +71,26 @@ class CandidateNeed(BaseModel):
     persona: str | None
     product_area: str | None
     examples: list[str] = []
+
+
+class FitRating(BaseModel):
+    """How much solving this need advances one company goal."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    goal: str = Field(description="The goal's key, exactly as given in <goals>")
+    rating: Literal[0, 1, 2, 3] = Field(
+        description="0 none, 1 indirect or minor, 2 clear, 3 directly and substantially"
+    )
+    rationale: str = Field(description="One sentence about the problem, not about who asked")
+    quote: str = Field(
+        description="A short passage copied exactly from one <request>; empty if none supports it"
+    )
+
+
+class StrategicFit(BaseModel):
+    """One rating per goal, each goal exactly once."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ratings: list[FitRating]
