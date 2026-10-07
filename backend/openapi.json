@@ -639,6 +639,31 @@
           }
         }
       }
+    },
+    "/requesters": {
+      "get": {
+        "tags": [
+          "requesters"
+        ],
+        "summary": "People the UI can act as (no auth, spec A3)",
+        "operationId": "list_requesters_requesters_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RequesterOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Requesters Requesters Get"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1776,6 +1801,65 @@
           "needs_review"
         ],
         "title": "RequestStatus"
+      },
+      "RequesterOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "account_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Id"
+          },
+          "account_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Name",
+            "description": "None for Brightboard staff"
+          },
+          "segment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Segment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "role",
+          "account_id",
+          "account_name",
+          "segment"
+        ],
+        "title": "RequesterOut"
       },
       "Segment": {
         "type": "string",

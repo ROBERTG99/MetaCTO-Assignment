@@ -1,14 +1,31 @@
-.PHONY: setup dev-api test lint typecheck check check-hooks seed seed-raw seed-live openapi rank eval-offline eval-tune eval eval-compare eval-fit-report snapshot
+.PHONY: setup dev dev-api dev-web test lint typecheck typecheck-web check check-hooks e2e gen-api seed seed-raw seed-live openapi rank eval-offline eval-tune eval eval-compare eval-fit-report snapshot
 
 BACKEND := cd backend &&
 
-# Install backend dependencies (Python 3.12 via uv)
+WEB := cd frontend &&
+
+# Install backend (Python 3.12 via uv) and frontend (npm) dependencies, the embedding model and Playwright's Chromium
 setup:
 	$(BACKEND) uv sync && uv run python -m app.ai.embeddings download
+	$(WEB) npm ci && npx playwright install chromium
+
+# API on :8000 (with its worker) and the web app on :5173
+dev:
+	$(MAKE) -j2 dev-api dev-web
 
 # API on :8000 with reload
 dev-api:
 	$(BACKEND) uv run uvicorn app.main:app --reload --port 8000
+
+dev-web:
+	$(WEB) npm run dev
+
+# Regenerate the frontend's API types from backend/openapi.json (run make openapi first)
+gen-api:
+	$(WEB) npm run gen:api
+
+typecheck-web:
+	$(WEB) npm run typecheck
 
 test:
 	$(BACKEND) uv run pytest
@@ -19,8 +36,8 @@ lint:
 typecheck:
 	$(BACKEND) uv run mypy
 
-# Full gate: lint, types, tests, hook tests
-check: lint typecheck test check-hooks
+# Full gate: lint, types, tests, hook tests, frontend types
+check: lint typecheck test check-hooks typecheck-web
 
 # Claude Code hook tests, with the project's ruff on PATH so the formatter tests run instead of skip
 check-hooks:
@@ -43,6 +60,11 @@ seed-live:
 # Free: print the priority ranking of the local database (PRIORITIES=path/to/priorities.yaml to try other weights)
 rank:
 	$(BACKEND) uv run python -m app.rank $(if $(PRIORITIES),--config $(abspath $(PRIORITIES)))
+
+# Golden paths (frontend/e2e): a fresh offline API on :8001 (backend/data/e2e.db, reseeded) with its in-process
+# worker, and the web app on :5174; Playwright starts and stops both. No API key, no network.
+e2e:
+	$(WEB) npx playwright test
 
 # Write backend/openapi.json without starting the server
 openapi:

@@ -1,6 +1,6 @@
 # Distill
 
-AI-first feature intelligence for a product team: unstructured feature requests in, deduplicated, need-centric and prioritized decisions out, with a PM in the loop. Built for the MetaCTO technical assessment ([docs/assignment.md](docs/assignment.md)). Work in progress: the backend and the AI layer exist; the frontend doesn't yet.
+AI-first feature intelligence for a product team: unstructured feature requests in, deduplicated, need-centric and prioritized decisions out, with a PM in the loop. Built for the MetaCTO technical assessment ([docs/assignment.md](docs/assignment.md)). Work in progress: the backend and the AI layer exist; the frontend has its shell and golden-path specs, and the pages come next.
 
 - What and why: [docs/spec.md](docs/spec.md) · Architecture: [docs/architecture.md](docs/architecture.md) · Decisions: [docs/adr/](docs/adr/)
 - Evals: [evals/REPORT.md](evals/REPORT.md) · Requirements traceability: [docs/requirements.md](docs/requirements.md)
@@ -9,10 +9,11 @@ AI-first feature intelligence for a product team: unstructured feature requests 
 ## Run it
 
 ```bash
-make setup      # uv sync + download the local embedding model (bge-small, 64 MB) so offline mode works
+make setup      # uv sync, the local embedding model (bge-small, 64 MB), npm ci and Playwright's Chromium
 make seed       # reset the local SQLite DB to the Brightboard seed, with recorded Haiku 4.5 output (seed/snapshot.json)
-make dev-api    # FastAPI on :8000 (AI_MODE=offline by default: no API key needed)
-make check      # ruff, mypy, pytest, hook tests
+make dev        # FastAPI on :8000 with its worker, and the web app on :5173 (AI_MODE=offline by default: no API key needed)
+make check      # ruff, mypy, pytest, hook tests, frontend typecheck
+make e2e        # Playwright golden paths against a fresh offline API (:8001) and web app (:5174)
 ```
 
 `make seed` is real Haiku 4.5 output, replayed from the cached evals with no API calls: it splits 10 duplicates into needs of their own and links the vague "make it better" (R62) to an existing need, so the backlog has 27 needs where the ground truth has 17 (caveat in [evals/snapshot.py](evals/snapshot.py)). `make seed-raw` loads only the raw requests (no AI output). Evals: `make eval-offline` (free), `make eval-compare` (free, from cached replies), `make eval` and `make seed-live` (paid; they ask first). An API key goes in a repo-root `.env` (`ANTHROPIC_API_KEY=`), never in code or chat.

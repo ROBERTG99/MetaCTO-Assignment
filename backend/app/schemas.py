@@ -307,3 +307,12 @@ class QuadrantView(BaseModel):
     not_rated: list[QuadrantNeed] = Field(
         description="Strategic fit not rated yet (pending, failed or offline)"
     )
+
+
+class RequesterOut(BaseModel):
+    id: int
+    name: str
+    role: str
+    account_id: int | None
+    account_name: str | None = Field(description="None for Brightboard staff")
+    segment: Segment | None

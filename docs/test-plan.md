@@ -134,16 +134,25 @@ Test-set composition. Robert's 17 handwritten cases (`H…`, `reviewed_by_human:
 
 ## 4. E2E golden paths (offline, seeded, Chromium)
 
-| ID | Path | Proves |
-|---|---|---|
-| GP1 | The requester types; matching needs appear (problem plus persona); "this is my need" plus why and severity; the support shows as claimed and not counted; once the worker confirms it, it counts on the need page | F0, F1, F3 (claims) |
-| GP2 | A new request is auto-linked; the PM finds it in the read-only Auto-linked tab, with its label, score and rationale; the PM undoes it; an unlink LinkEvent is recorded (nothing deleted) and the request is back in Suggestions | F2, F3, F5 |
-| GP3 | A gray-zone request shows in the inbox side by side; the PM accepts; demand and the score breakdown on the need update | F0, F4, F5 |
-| GP4 | The provider fails (a test-only switch, active only when `APP_ENV=test`); the request is in Needs review with the reason; the PM links it by hand | F2 failure path, rule 2 |
-| GP5 | A sampled auto-link appears in the Audit tab; the PM marks it false_merge; the link is undone, the request is back in Suggestions, and M4 in the metrics view updates | F3 audit, F8, M4 |
-| GP6 | The metrics view shows M1, M2, M4, the acceptance rate and the ai_runs cost and latency summary | F8 |
+Written before the pages (2026-10-07) as the contract for them: accessible names, roles and visible text, not CSS. `make e2e` starts a fresh offline API on :8001 (its own `backend/data/e2e.db`, reseeded from the recorded snapshot every run) with the in-process worker, and the web app on :5174; the specs share that database and run one at a time.
 
-Seed scenarios are designed so that the offline provider deterministically puts one request in each band.
+| ID | Spec | Path | Proves |
+|---|---|---|---|
+| GP1 | `e2e/discover-and-support.spec.ts` | Kai types "Can we log in with Okta?"; the SSO need is the closest match, phrased as a problem for a persona; "This is my need", why it matters and Blocker; no duplicate request is filed; the need page lists the support with its severity and whether it counts yet | F0, F1, F3 (claims); R8, R9 |
+| GP2 | `e2e/submit-and-track.spec.ts` | Lily submits "Book meeting rooms" (offline similarity 0.61, below the suggest band); My requests shows it, updates to Processed without a reload, and links to the new need, which shows it was created by the offline baseline | F2; R7 |
+| GP3 | `e2e/pm-triage.spec.ts` | A gray-zone request (similarity 0.735 to SSO, between 0.651 and 0.767) is a suggestion side by side with SSO, with source and why; the PM accepts; marks one audit-sample auto-link correct; undoes an auto-link after a confirmation, and it leaves the Auto-linked tab | F3, F5; Q6 |
+| GP4 | `e2e/pm-priorities.spec.ts` | The quadrant shows clear wins, strategic bets, popular but off-strategy, park and not rated yet, with every undecided need placed; the SSO row's "Explain score" opens a breakdown whose demand, urgency and strategic-fit sections explain their inputs and whose points add up to the score in the table | F4, §8; R10 |
+| planned | provider failure | The provider fails (a test-only switch, active only when `APP_ENV=test`); the request is in Needs review with the reason; the PM links it by hand | F2 failure path, rule 2 |
+| planned | metrics | The metrics view shows M1, M2, M4, the acceptance rate and the ai_runs cost and latency summary | F8 |
+
+The offline texts were chosen by measuring the real embedder against the seeded backlog, so each lands in its band deterministically; a seed or threshold change can move them, and the spec comments give the measured similarity.
+
+Notes for building the pages against these specs:
+- **Shared database, fixed order.** Specs run one at a time in file order (discover, priorities, triage, submit). The triage spec changes the backlog (an accept, an undo that creates a need); the others don't depend on its result. Offline, any membership change queues a strategic-fit rating that only live mode runs, so touched needs show "Pending".
+- **Offline claims are disputed.** GP1's reason is 0.584 similar to SSO, below the suggest band, so the baseline disputes the claim; the spec accepts any of the three states.
+- **Polling.** My requests and the triage inbox must refetch on an interval while anything is pending (headless browsers don't refocus), or the 30 s waits fail.
+- **Stable hooks the pages must provide:** `data-testid` `support-confirmation`, `request-status`, `need-link`, `need-source`, `routing-badge`, `priority`, `points` (one per rated component; none for an unrated one), `priority-total`; `data-request-id` on Auto-linked articles; toasts through sonner's "Notifications" region.
+- **API work the pages need** (not built yet): the request's AI source on triage items and needs (model or offline-baseline); a deterministic rationale for baseline decisions (e.g. "Embedding similarity 0.735 to need 1; suggest band 0.651-0.767"), so "why" is never empty; `GET /requests?requester_id=` for My requests; an Auto-linked list for the triage tab; and a PM identity for the `by` field of triage actions.
 
 ## 5. What we deliberately don't test
 
