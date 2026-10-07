@@ -11,10 +11,10 @@ CLAUDE.md rule 2: a submission is saved before any model call, enrichment runs i
 - **The worker loop.** It starts in FastAPI's lifespan, claims the oldest pending row, sets it `processing` with `claimed_at = now`, and increments `attempts`.
 - **Transient errors** (provider errors, timeouts): the row goes back to `pending`, with `last_error` recorded. It becomes eligible again when `claimed_at + backoff(attempts) <= now` (backoff 5 s × 2^attempts), so no extra column is needed.
 - **Terminal failures** move the row to `needs_review` with the reason, with no further retries. They are: a refusal; a second max_tokens or validation failure (the gateway retries each once itself); and a transient error on the Nth attempt (default 3).
-- **Stale claims.** On startup, and periodically, `processing` rows whose `claimed_at` is older than the lease (default 300 s) go back to `pending`.
+- **Stale claims.** At startup every `processing` row goes back to `pending` (one worker: it was interrupted). While running, rows older than the lease (600 s, above the worst case of 30 s × 3 SDK tries × 2 gateway tries × 2 steps) are reclaimed every 60 s.
 - **No partial state.** Results (AI fields, need_id, suggestions, LinkEvents) are written in one transaction with `status = processed`, so a retry is idempotent.
 - **Claims use the same loop.** Supports in `claimed` state are checked by it too, with their own `check_attempts`, `check_started_at` and `check_error`, under the same lease and backoff rules. A terminal failure sets the support to `disputed` with a `review_reason`, so it lands in the Disputed claims tab instead of staying `claimed` forever.
-- **Testable without timing.** `worker.run_once()` processes one row, so tests drive the worker deterministically.
+- **Testable without timing.** `worker.run_once()` processes one row, so tests drive the worker deterministically. The loop calls `tick()`, which logs and swallows errors outside the pipeline, so the worker never dies silently.
 - Revised on 2026-10-07: the first version used a separate `job` table. Robert's decision (f) was "new requests are saved as pending; the worker claims rows", and a separate table adds a second state to keep in sync for no gain at this size.
 
 ## Alternatives rejected

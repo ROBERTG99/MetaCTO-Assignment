@@ -10,9 +10,15 @@ from fastapi.testclient import TestClient
 from sqlalchemy.engine import Engine
 from sqlmodel import Session
 
+from app.ai.embeddings import FakeEmbedder
+from app.ai.gateway import FakeLLM, Gateway, StepConfig, recorder
+from app.ai.index import NeedSearch
+from app.ai.pipeline import Deps
+from app.ai.policy import RoutingConfig
 from app.db import create_tables, make_engine
 from app.main import create_app
 from app.models import Account, Need, Request, Requester, RequestSource, Segment, Support, SupportLinkStatus
+from app.scoring import PrioritiesConfig
 
 
 @pytest.fixture
@@ -24,8 +30,35 @@ def engine(tmp_path: Path) -> Iterator[Engine]:
 
 
 @pytest.fixture
-def client(engine: Engine) -> Iterator[TestClient]:
-    with TestClient(create_app(engine)) as c:
+def fake_llm() -> FakeLLM:
+    return FakeLLM()
+
+
+ROUTING = RoutingConfig(
+    w_label=0.5, w_sim=0.3, w_fields=0.2, s_min=0.2, s_max=0.8, auto=0.9, suggest=0.6,
+    audit_rate=0.0, audit_seed="test", top_k=5,
+)  # fmt: skip
+
+
+@pytest.fixture
+def deps(engine: Engine, fake_llm: FakeLLM) -> Deps:
+    steps = {
+        "extract": StepConfig("claude-haiku-4-5", 2000),
+        "adjudicate": StepConfig("claude-sonnet-5-5", 4000, "low"),
+    }
+    prices = {
+        "claude-haiku-4-5": {"input": 1.0, "output": 5.0},
+        "claude-sonnet-5-5": {"input": 2.0, "output": 10.0},
+    }
+    gateway = Gateway(client=fake_llm, steps=steps, prices=prices, record=recorder(engine))
+    return Deps(
+        gateway=gateway, search=NeedSearch(FakeEmbedder()), routing=ROUTING, priorities=PrioritiesConfig()
+    )
+
+
+@pytest.fixture
+def client(engine: Engine, deps: Deps) -> Iterator[TestClient]:
+    with TestClient(create_app(engine, deps=deps, start_worker=False)) as c:
         yield c
 
 

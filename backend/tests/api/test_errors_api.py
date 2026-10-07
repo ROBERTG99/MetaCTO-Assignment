@@ -2,7 +2,9 @@
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.engine import Engine
 
+from app.ai.pipeline import Deps
 from app.main import create_app
 from tests.conftest import assert_error
 
@@ -10,7 +12,7 @@ TOO_BIG = 2**63  # one past SQLite's 64-bit integer
 
 
 def test_unexpected_error_returns_500_in_our_error_shape(
-    engine: object, monkeypatch: pytest.MonkeyPatch
+    engine: Engine, deps: Deps, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from app.services import needs as service
 
@@ -18,7 +20,9 @@ def test_unexpected_error_returns_500_in_our_error_shape(
         raise RuntimeError("database on fire")
 
     monkeypatch.setattr(service, "list_needs", boom)
-    with TestClient(create_app(engine), raise_server_exceptions=False) as client:  # type: ignore[arg-type]
+    with TestClient(
+        create_app(engine, deps=deps, start_worker=False), raise_server_exceptions=False
+    ) as client:
         r = client.get("/needs")
     assert r.status_code == 500
     assert_error(r.json(), "internal_error")

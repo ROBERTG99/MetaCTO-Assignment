@@ -31,9 +31,10 @@ class NeedIndex:
         return len(self._needs)
 
     def _add(self, need_id: str, via: str, text: str) -> None:
+        row = self.embedder.embed([text])[0]  # embed first: the three lists only ever change together
         self._needs.append(need_id)
         self._via.append(via)
-        self._rows.append(self.embedder.embed([text])[0])
+        self._rows.append(row)
         self._matrix = None
 
     def add_request(self, ref: str, need_id: str, text: str) -> None:
@@ -41,6 +42,15 @@ class NeedIndex:
 
     def add_canonical(self, need_id: str, text: str) -> None:
         self._add(need_id, "canonical", text)
+
+    def refs(self) -> set[str]:
+        return set(self._via)
+
+    def reassign(self, via: str, need_id: str) -> None:
+        """Point an indexed request at another need (unlink, merge). Its vector stays the same."""
+        for i, v in enumerate(self._via):
+            if v == via:
+                self._needs[i] = need_id
 
     def search(self, text: str, k: int = 5) -> list[Hit]:
         if not self._needs:

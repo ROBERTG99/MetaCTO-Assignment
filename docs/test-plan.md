@@ -39,6 +39,12 @@ No test calls a real model (CLAUDE.md rule 8). Unit and API tests inject FakeLLM
 | Baseline bands and threshold loading (passing) | `unit/test_baseline.py` |
 | Embedders: fake determinism, real model offline (passing) | `unit/test_embeddings.py` |
 | Runner logic: dev labels, noise, raw tuning mode, each test case counted once (passing) | `evals/tests/test_run.py` |
+| Routing score, bands, seeded 10% audit sample, claim verdict (passing) | `unit/test_policy.py` |
+| Redaction of emails and phones, not other numbers (passing) | `unit/test_redaction.py` |
+| Gateway: AIRun per call, refusal terminal, one repair retry, max_tokens retry, transient errors, redaction before the client, XML tags (passing) | `unit/test_gateway.py` |
+| Pipeline with FakeLLM: auto, gray zone, new need, audit flag, prompt injection, redaction, idempotency, claims (passing) | `unit/test_pipeline.py` |
+| Worker: one at a time, attempts and last error, backoff, 3 failures to needs_review, refusal, stale reclaim, outage never fails a submission (passing) | `unit/test_worker.py` |
+| Enrichment: demand, urgency, priority (passing) | `unit/test_scoring.py` |
 | Seed data: every request labelled, clusters of two or more, references exist, the Excel split on both sides, the loader loads raw data only (passing) | `unit/test_seed_data.py` |
 | SQLite in WAL mode with foreign keys (passing) | `unit/test_db.py` |
 
@@ -49,7 +55,8 @@ No test calls a real model (CLAUDE.md rule 8). Unit and API tests inject FakeLLM
 | Submit: saved before any model call, saved when the provider fails, claim plus support in one transaction | `api/test_requests_api.py` |
 | List, search, suggest (never calls the gateway); merged needs excluded | `api/test_needs_api.py` |
 | Support: idempotent per requester | `api/test_support_api.py` |
-| Inbox actions: accept, reject, undo, manual link, audit verdict, merge; every transition in spec §5; nothing deleted | `api/test_triage_api.py` |
+| Inbox actions: accept, reject, undo, audit verdict; LinkEvents record who; nothing deleted (passing; manual link and merge not built yet) | `api/test_triage_api.py` |
+| The door: similar needs from embeddings only, merged needs excluded (passing) | `api/test_similar_api.py` |
 | Metrics endpoint | `api/test_metrics_api.py` |
 | Briefs and stakeholder updates (should): nothing goes out without approval | `api/test_briefs_api.py`, `api/test_updates_api.py` |
 

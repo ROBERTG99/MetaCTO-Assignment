@@ -129,6 +129,7 @@ class Request(SQLModel, table=True):
     severity_signal: str | None = None
     extraction_confidence: float | None = None
     extraction_rationale: str | None = None
+    need_statement: str | None = None  # problem plus persona, from the extraction
     need_id: int | None = Field(default=None, foreign_key="need.id", index=True)
     created_at: datetime = Field(default_factory=utcnow, index=True)
     processed_at: datetime | None = None

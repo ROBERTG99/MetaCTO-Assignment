@@ -148,3 +148,80 @@ class NeedDetail(NeedSummary):
     requests: list[NeedRequestOut]
     supports: list[SupportOut]
     accounts: list[AccountOut]
+
+
+class NeedRef(BaseModel):
+    id: int
+    title: str
+    problem: str
+    persona: str | None
+    product_area: str | None
+
+
+class TriageRequest(BaseModel):
+    id: int
+    title: str
+    description: str
+    need_statement: str | None
+    persona: str | None
+
+
+class TriageSupport(BaseModel):
+    id: int
+    why_it_matters: str
+    severity: Severity
+    claimed_need: NeedRef | None
+    reason: str | None
+
+
+class TriageItem(BaseModel):
+    id: int
+    kind: Literal["suggestion", "claim", "audit"]
+    routing_score: float | None
+    label: str | None
+    model_confidence: float | None
+    rationale: str | None
+    quotes: list[str]
+    created_at: datetime
+    need: NeedRef | None = Field(
+        description="Suggestion and audit: the need of the link. Claim: the claimed need"
+    )
+    alternative_need: NeedRef | None = Field(description="Claim only: the need the model would pick instead")
+    request: TriageRequest | None
+    support: TriageSupport | None
+
+
+class FailedRequest(BaseModel):
+    id: int
+    title: str
+    reason: str | None
+    attempts: int
+
+
+class TriageList(BaseModel):
+    items: list[TriageItem]
+    needs_review: list[FailedRequest]
+
+
+class DecisionResult(BaseModel):
+    id: int
+    kind: Literal["suggestion", "claim", "audit"]
+    state: str
+    audit_verdict: str | None
+    need_id: int | None
+
+
+class UnlinkResult(BaseModel):
+    request_id: int
+    need_id: int
+    title: str
+
+
+class SimilarNeed(BaseModel):
+    need_id: int
+    title: str
+    problem: str
+    persona: str | None
+    product_area: str | None
+    status: NeedStatus
+    score: float

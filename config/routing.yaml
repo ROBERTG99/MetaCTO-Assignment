@@ -8,3 +8,28 @@ baseline:
     suggest: highest that keeps 95% of the remaining true duplicates. Stored unrounded.'
   tuned_at: '2026-10-07T15:38:37Z'
   git: 3ce8b0d-dirty
+llm:
+  note: Routing for the LLM strategy (ADR 0003, spec §8). Weights and thresholds are
+    starting values; s_min/s_max are placeholders until the first paid eval calibrates
+    them on dev.
+  weights:
+    label: 0.5
+    similarity: 0.3
+    fields: 0.2
+  similarity:
+    s_min: 0.55
+    s_max: 0.85
+  thresholds:
+    auto: 0.9
+    suggest: 0.6
+  audit:
+    rate: 0.1
+    seed: distill-audit-v1
+  top_k: 5
+  models:
+    extract: fast
+    adjudicate: smart
+  effort:
+    adjudicate: null
+  effort_note: null = the model's default (high on Sonnet 5.5). Haiku 4.5 takes no
+    effort. Set from the first eval.

@@ -1,4 +1,4 @@
-.PHONY: setup dev-api test lint typecheck check check-hooks seed openapi eval-offline eval-tune eval
+.PHONY: setup dev-api test lint typecheck check check-hooks seed seed-live openapi eval-offline eval-tune eval
 
 BACKEND := cd backend &&
 
@@ -29,6 +29,11 @@ check-hooks:
 # Reset the local database and load the raw Brightboard seed (no needs, all requests pending)
 seed:
 	$(BACKEND) uv run python -m seed.load
+
+# Paid: reset to the seed with a curated backlog and run REFS through the live pipeline (settings ask first)
+REFS ?= R22,R13,R07
+seed-live:
+	$(BACKEND) AI_MODE=live HF_HUB_OFFLINE=1 uv run python -m seed.live --refs $(REFS)
 
 # Write backend/openapi.json without starting the server
 openapi:

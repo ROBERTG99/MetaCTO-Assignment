@@ -71,3 +71,10 @@ def test_ties_break_by_need_id() -> None:
     idx.add_request("R2", "zeta", "b")
     idx.add_request("R1", "alpha", "a")
     assert [h.need_id for h in idx.search("q")] == ["alpha", "zeta"]
+
+
+def test_reassign_moves_a_request_to_another_need(index: NeedIndex) -> None:
+    index.reassign("R2", "sso-split")
+    hits = {h.need_id: (round(h.score, 3), h.via) for h in index.search("q", k=5)}
+    assert hits["sso-split"] == (0.9, "R2")
+    assert hits["sso"] == (0.6, "R1")

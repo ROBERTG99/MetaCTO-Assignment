@@ -363,3 +363,46 @@ SUMMARY:
 - Results: paraphrase recall@5 100% (gate met), recall@1 64%. Test accuracy 107/150; auto false merges 6/59 (10.2%, all in hard slices dev lacks); only 6/25 "new" cases stayed new; 55% go to the PM inbox. Dev accuracy 39/62, auto 0/13 wrong. REPORT.md §1 written.
 - Reviewer (opus): fix first. Fixed: a rounding bug that moved the boundary (thresholds now unrounded; dev went 12 to 13 auto-links; test unchanged); finding 1 reworded after I verified the ablation (the canonical titles aren't the cause); a "test seen" note; runner logic tests; a real no-network test; bucket clamping; an empty-FROZEN refusal; git warnings; cache path relative to backend/.
 - Docs: test-plan §3, spec §8 baseline, requirements D1. make check: 112 pytest + 29 hook tests. Committed; not pushed (GitHub 500, per Robert).
+
+---
+[#12] 2026-10-07T16:22:49Z
+PROMPT:
+Now the AI layer. The model's judgment gets measured by evals, and everything around it is deterministic and gets written test-first.
+
+1. Test first. Write these tests with FakeLLM and the fake embedder, run them, show they fail, then implement:
+   - the routing score is computed in code from the model's label, the embedding similarity and whether the extracted product area and persona agree with the candidate need, and each band routes correctly: auto-link at or above the auto threshold, a triage suggestion in the gray zone, a new need below;
+   - a random 10% of auto-links is flagged for the PM audit sample, and the sampling is seeded so tests are repeatable;
+   - a requester-claimed link goes through adjudication, stays as it is when the model agrees, and goes to the PM inbox when it disagrees;
+   - a prompt-injection request can't produce an auto-link outside the policy, whatever the model returns;
+   - the worker claims pending requests one at a time, records attempts and the last error, reclaims stale claims on startup, and moves a request to needs_review with the reason after 3 failures;
+   - a provider timeout or 5xx never fails the submission, which was already saved;
+   - a refusal goes to needs_review, and a validation error gets exactly one repair retry;
+   - emails and phone numbers are redacted before the gateway is called, asserted on what FakeLLM received;
+   - undo restores the request as its own need and records who did it;
+   - processing the same request twice doesn't double-link;
+   - every model call writes an AIRun with tokens, cost, latency, prompt version and outcome.
+2. Build:
+   - app/ai/gateway.py: an LLMClient protocol with AnthropicClient, FakeLLM and the offline baseline, selected by AI_MODE. Structured outputs with Pydantic, an explicit timeout and retries, and cost from a price table in config. Follow .claude/rules/llm-code.md and load the claude-api skill before writing SDK code.
+   - app/ai/prompts/extract_need_v1.md and adjudicate_v1.md. Request text goes in <request> tags and candidates in <candidates>, both treated as data. The requester's "why it matters" text goes in too when there is one. Show me both prompts in your summary. I'll read them.
+   - app/ai/pipeline.py: redact, embed, retrieve, extract with FAST_MODEL, adjudicate with the configured strategy, compute the routing score, route by the thresholds in config/priorities.yaml, enrich with account data, and mark processed.
+   - app/worker.py: the database queue, started in FastAPI's lifespan, with run_once() for tests.
+   - GET /needs/similar?q= for the door, embeddings only, returning each need phrased as problem plus persona. GET /triage, which includes the audit sample and claim disagreements, POST /triage/{id}/accept, POST /triage/{id}/reject and POST /requests/{id}/unlink.
+3. Tell me the expected cost. After my go, run three seed requests live with AI_MODE=live and show me their AIRun rows.
+
+Deliverables: app/ai/ with the gateway, fake, prompts and pipeline, app/worker.py, the triage endpoints and the tests.
+Done when: the tests above went red then green, make check is green, /needs/similar answers in under 300 ms on the seed and you show me the timing, and the three live runs look sane. Run the reviewer subagent before committing. Commit "feat(ai): intake workflow with a database queue and code-computed routing" and push.
+SUMMARY:
+- Loaded the claude-api skill (anthropic 1.11.0). Built app/ai: gateway (Anthropic, FakeLLM and offline clients; AIRun per call; validation repair; max_tokens retry), extract_need_v1 and adjudicate_v1 prompts, policy, redact, index, pipeline, scoring; app/worker.py; GET /needs/similar, GET /triage, accept, reject, unlink; config prices, priorities and routing.yaml llm.
+- Test-first: 63 new tests red (NotImplementedError), then green. Reviewer (opus): fix first, with 3 blockers (parse hid refusal and max_tokens; no index lock; a restart within 5 min left rows stuck) plus 15 should-fix. Wrote 25 more red tests, then fixed all of them: messages.create plus our own validation, costed failures, a locked index, startup reclaim of every row, a periodic reclaim, a loop that can't die, single-pass rendering, the claim judged on its reason, role and extraction sent to the adjudicator, verified quotes, merge-safe accept, compare-and-set decisions, already_alone, undo of an audited link counts as a false merge, typed responses. ADR 0008 added; spec §5/§6, ADRs 0004 and 0007, the test plan and requirements updated.
+- make check: 201 pytest + 29 hook tests. /needs/similar on the seed: p50 5.0 ms, p95 6.2 ms (50 calls).
+- Deviations: thresholds are in config/routing.yaml llm, not priorities.yaml (spec, ADR 0003); llm-code.md says use parse (ADR 0008 explains why not; the rule is Robert's to change).
+- Live run not done: cost estimate given (6 calls, ~$0.05, worst case ~$0.11). No key is configured (no .env, env var or ant profile). Waiting for Robert's go and key. Not committed yet.
+
+---
+[#13] 2026-10-07T16:25:54Z
+PROMPT:
+env created, try it now.
+SUMMARY:
+- Ran make seed-live REFS=R22,R13,R07 (approved): 6 live calls, all ok, $0.036. R22 auto-linked correctly (0.95); R13 suggested for the right need (0.896); R07's injection was ignored and nothing auto-linked, but it became a new need instead of SSO (persona over-split).
+- Found and fixed (test-first, 2 red then green) a cost bug: the dated model id claude-haiku-4-5-20251001 missed the price table, so Haiku calls were recorded at $0. The gateway now prices by the configured model and refuses unpriced models.
+- REPORT.md §2: live smoke run (n=3, not an eval). make check: 203 pytest + 29 hook tests. Committed "feat(ai): intake workflow with a database queue and code-computed routing"; not pushed (waiting for Robert to confirm GitHub works).

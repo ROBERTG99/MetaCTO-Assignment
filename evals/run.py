@@ -210,7 +210,9 @@ def tune(embedder: Embedder) -> Thresholds:
         "git": git_sha(),
     }
     ROUTING.parent.mkdir(exist_ok=True)
-    ROUTING.write_text(yaml.safe_dump({"baseline": meta}, sort_keys=False))
+    data = yaml.safe_load(ROUTING.read_text()) if ROUTING.exists() else {}
+    data["baseline"] = meta  # keep the other sections (llm)
+    ROUTING.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
     return th
 
 

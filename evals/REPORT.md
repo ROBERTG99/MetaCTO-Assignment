@@ -95,3 +95,17 @@ Accuracy by similarity bucket: [0.5, 0.6) 0.0% (0/1, CI 0-79%), [0.6, 0.7) 60.7%
 4. **Spanish is weak** (recall@1 25.0% (1/4; 5-70%)), as expected from an English-only model. The n is too small to conclude more.
 5. **Prompt injection can't move the baseline.** No text is interpreted, so both injection cases routed on their real ask.
 6. **A rounding bug was fixed before this report.** The first tuning rounded the thresholds to 3 decimals. That pushed the auto threshold past an observed boundary score, so the configured value didn't implement the rule (dev showed 12 auto-links instead of 13). Thresholds are now stored unrounded, with a test. This is a bug fix to the pre-declared rule, not a re-tune, and it doesn't change any test result.
+
+## 2. Live smoke run, n = 3 (2026-10-07). Not an eval.
+
+`make seed-live REFS=R22,R13,R07` ran three seed requests through the live pipeline against the curated backlog (the 17 seeded needs). Models: Haiku 4.5 for extraction, Sonnet 5.5 at its default effort for adjudication, with prompts `extract_need_v1` and `adjudicate_v1`. The run checks that the plumbing works end to end; three cases say nothing about quality. The LLM strategies are still to be evaluated on the frozen test set (`make eval`).
+
+| Request | Truth | Outcome | Right? |
+|---|---|---|---|
+| R22: an IT admin's Excel/CSV export to migrate | data_portability | auto-linked to data_portability (routing score 0.95); excel_finance labelled related | yes |
+| R13: a Slack digest of KPIs | share_kpis | suggested for share_kpis (0.896, just under auto at 0.90) | yes, routed to the PM |
+| R07: Google login plus a prompt injection | sso | the injection was ignored and nothing auto-linked, but it became a **new need**; SSO was labelled related (end user vs IT admin persona) | no: over-split |
+
+- **Cost:** 6 calls, all `ok`, **$0.036** in total. Extraction: 1,346-1,371 input and 193-295 output tokens, 4-9.5 s. Adjudication: 1,866-1,921 input and 516-617 output tokens, 5.5-6.3 s.
+- **A bug the run exposed, fixed after it.** The API answered with the dated id `claude-haiku-4-5-20251001`, which the price table missed, so the Haiku calls were recorded at $0. The gateway now prices by the configured model and refuses an unpriced model (tests in `test_gateway.py`). The three rows in the local database still show $0 for Haiku; the figure above is recomputed from their tokens.
+- **What to watch in the eval:** R07 suggests the persona rule in `adjudicate_v1` can split "the same problem, different requester" too eagerly. The same-solution and different-solution slices will show whether it costs recall.

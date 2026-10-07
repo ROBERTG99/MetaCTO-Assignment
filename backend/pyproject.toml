@@ -11,6 +11,7 @@ dependencies = [
     "pydantic-settings>=2.4",
     "fastembed>=0.8.1",
     "pyyaml>=6.0.3",
+    "anthropic>=1.11.0",
 ]
 
 [dependency-groups]

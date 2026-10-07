@@ -1,10 +1,22 @@
-from fastapi import APIRouter, Depends, Path, Query, Response
+from typing import Any
+
+from fastapi import APIRouter, Depends, Path, Query, Request, Response
 from sqlmodel import Session
 
 from app.db import get_session
 from app.models import NeedStatus, Segment
-from app.schemas import MAX_ID, ErrorResponse, NeedDetail, NeedPage, NeedSort, SupportCreate, SupportOut
+from app.schemas import (
+    MAX_ID,
+    ErrorResponse,
+    NeedDetail,
+    NeedPage,
+    NeedSort,
+    SimilarNeed,
+    SupportCreate,
+    SupportOut,
+)
 from app.services import needs as service
+from app.services import triage
 
 router = APIRouter(tags=["needs"])
 NeedId = Path(ge=1, le=MAX_ID)
@@ -33,6 +45,19 @@ def list_needs(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get(
+    "/needs/similar",
+    response_model=list[SimilarNeed],
+    summary="Needs similar to what the requester is typing (embeddings only)",
+)
+def similar_needs(
+    request: Request,
+    q: str = Query(min_length=3, max_length=500),
+    session: Session = Depends(get_session),
+) -> list[dict[str, Any]]:
+    return triage.similar(session, q, request.app.state.deps)
 
 
 @router.get(

@@ -84,11 +84,11 @@ All tables live in SQLite (`backend/app/models.py`). Current state lives on the 
 | Claim check fails (terminal) | (support) | support `disputed` with review_reason | Disputed claims |
 | PM accepts | processed | need_id set; suggestion `accepted`; LinkEvent link by pm. For a claim: support `confirmed`. | none |
 | PM rejects | processed | suggestion `rejected`; the PM links elsewhere or creates a new need (LinkEvent by pm). For a claim: support `rejected`. | none |
-| PM undoes an auto-link | processed | LinkEvent unlink by pm (reason undo); need_id null; suggestion `undone`; next-best candidates `proposed` | Suggestions |
-| Audit verdict false_merge | processed | audit_verdict set; then as for an undo (reason "audit: false_merge") | Suggestions |
+| PM undoes a link (`POST /requests/{id}/unlink`) | processed | The request becomes its own need: LinkEvent unlink and link by pm (reason undo); suggestion `undone`; a sampled link with no verdict is recorded as false_merge. 409 if it is already the only request in its need | none |
+| Audit verdict false_merge | processed | audit_verdict set; the request becomes its own need, as for an undo (reason "audit: false_merge") | none |
 | PM relinks the last request of an AI-created need, or merges two needs | processed | unlink + link LinkEvents; the emptied need becomes `merged` with merged_into_id | none |
 
-**Audit sample** (F3). An auto-link is sampled when `sha256(request_id) mod 10 == 0`: about 10%, reproducible and testable. The PM marks each sampled link correct or false_merge.
+**Audit sample** (F3). An auto-link is sampled when `sha256(seed:request_id) mod 10000 < rate × 10000` (seed and rate 10% in `config/routing.yaml`): random-looking, reproducible and testable. Decisions are compare-and-set: a second decision on the same item gets 409. Accepting into a need that has since been merged follows the merge. The PM marks each sampled link correct or false_merge.
 
 ## 6. AI pipeline
 
@@ -102,6 +102,16 @@ All tables live in SQLite (`backend/app/models.py`). Current state lives on the 
 | 6 | Route | Routing score and thresholds (section 8) | none | yes | not applicable |
 | 7 | Enrich | Join the requester and account: segment, ARR, renewal date, pipeline | none | yes | Missing account: score without revenue; the gap is flagged |
 | 8 | Score | The prioritization formulas (section 8) | none | yes | not applicable |
+
+**As built (2026-10-07)** in `backend/app/ai/`:
+- **Gateway.** It renders `prompts/extract_need_v1.md` and `prompts/adjudicate_v1.md`. Untrusted text is redacted, then HTML-escaped inside `<request>`, `<why_it_matters>` and `<candidates>`.
+- **Clients.**
+  - Live: `messages.parse` with a Pydantic `output_format`, a 30 s timeout and 2 SDK retries.
+  - Tests: FakeLLM.
+  - `AI_MODE=offline`: keyword heuristics for extraction, and the pipeline routes on similarity alone (the baseline).
+- **Refusal fallbacks are off on purpose.** A refusal must reach needs_review, and one model per step keeps the evals clean.
+- **Configuration.** Routing weights and thresholds are in `config/routing.yaml` → `llm`. Prioritization is in `config/priorities.yaml` and prices in `config/prices.yaml`.
+- **Claims.** A claim is checked with `<request>` = "I support this existing need: <title>" and the requester's reason in `<why_it_matters>`. A claim with no reason goes to the inbox without a model call. Ids the model invents are ignored, and a candidate it skips counts as "different".
 
 Model calls happen first. All results are then written in one transaction, so a retry never leaves partial state. ai_runs are written separately, so failed calls still count toward cost.
 

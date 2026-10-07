@@ -1,0 +1,10 @@
+# Prioritization (spec §8). Code computes every component; the model only rates strategic fit (should).
+weights: {demand: 0.40, urgency: 0.25, strategic: 0.35}
+demand:
+  p_win: 0.2          # share of a prospect's pipeline value counted as demand
+  r_cap: 5000000      # revenue (USD) at which demand reaches 1.0, log scale
+urgency:
+  severity_weight: 0.6
+  renewal_weight: 0.4
+  renewal_days: 90
+severity: {blocker: 1.0, important: 0.5, nice_to_have: 0.2, unknown: 0.0}

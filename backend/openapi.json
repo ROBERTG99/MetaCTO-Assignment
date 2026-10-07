@@ -188,6 +188,54 @@
         }
       }
     },
+    "/needs/similar": {
+      "get": {
+        "tags": [
+          "needs"
+        ],
+        "summary": "Needs similar to what the requester is typing (embeddings only)",
+        "operationId": "similar_needs_needs_similar_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 500,
+              "title": "Q"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SimilarNeed"
+                  },
+                  "title": "Response Similar Needs Needs Similar Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/needs/{need_id}": {
       "get": {
         "tags": [
@@ -326,6 +374,249 @@
           }
         }
       }
+    },
+    "/triage": {
+      "get": {
+        "tags": [
+          "triage"
+        ],
+        "summary": "The PM inbox: suggestions, claim disputes, the audit sample and failures",
+        "operationId": "list_triage_triage_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TriageList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/triage/{suggestion_id}/accept": {
+      "post": {
+        "tags": [
+          "triage"
+        ],
+        "summary": "Accept a suggestion, confirm a claim, or mark an audit correct",
+        "operationId": "accept_triage__suggestion_id__accept_post",
+        "parameters": [
+          {
+            "name": "suggestion_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Suggestion Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Decision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    },
+    "/triage/{suggestion_id}/reject": {
+      "post": {
+        "tags": [
+          "triage"
+        ],
+        "summary": "Reject a suggestion or claim, or mark an audit a false merge",
+        "operationId": "reject_triage__suggestion_id__reject_post",
+        "parameters": [
+          {
+            "name": "suggestion_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Suggestion Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Decision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    },
+    "/requests/{request_id}/unlink": {
+      "post": {
+        "tags": [
+          "triage"
+        ],
+        "summary": "Undo a link: the request becomes its own need",
+        "operationId": "unlink_requests__request_id__unlink_post",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Request Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Decision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnlinkResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -387,6 +678,74 @@
         ],
         "title": "AccountOut"
       },
+      "Decision": {
+        "properties": {
+          "by": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "by"
+        ],
+        "title": "Decision",
+        "description": "Who decided. There is no auth yet (spec A3), so the PM names themselves."
+      },
+      "DecisionResult": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "suggestion",
+              "claim",
+              "audit"
+            ],
+            "title": "Kind"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "audit_verdict": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audit Verdict"
+          },
+          "need_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Need Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "state",
+          "audit_verdict",
+          "need_id"
+        ],
+        "title": "DecisionResult"
+      },
       "ErrorDetail": {
         "properties": {
           "field": {
@@ -442,6 +801,54 @@
           "error"
         ],
         "title": "ErrorResponse"
+      },
+      "FailedRequest": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "reason",
+          "attempts"
+        ],
+        "title": "FailedRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
       },
       "NeedDetail": {
         "properties": {
@@ -661,6 +1068,53 @@
           "page_size"
         ],
         "title": "NeedPage"
+      },
+      "NeedRef": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "problem": {
+            "type": "string",
+            "title": "Problem"
+          },
+          "persona": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona"
+          },
+          "product_area": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Area"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "problem",
+          "persona",
+          "product_area"
+        ],
+        "title": "NeedRef"
       },
       "NeedRequestOut": {
         "properties": {
@@ -1044,6 +1498,62 @@
         ],
         "title": "Severity"
       },
+      "SimilarNeed": {
+        "properties": {
+          "need_id": {
+            "type": "integer",
+            "title": "Need Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "problem": {
+            "type": "string",
+            "title": "Problem"
+          },
+          "persona": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona"
+          },
+          "product_area": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Area"
+          },
+          "status": {
+            "$ref": "#/components/schemas/NeedStatus"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "need_id",
+          "title",
+          "problem",
+          "persona",
+          "product_area",
+          "status",
+          "score"
+        ],
+        "title": "SimilarNeed"
+      },
       "SupportCreate": {
         "properties": {
           "requester_id": {
@@ -1145,6 +1655,316 @@
           "created_at"
         ],
         "title": "SupportOut"
+      },
+      "TriageItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "suggestion",
+              "claim",
+              "audit"
+            ],
+            "title": "Kind"
+          },
+          "routing_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Routing Score"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "model_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Confidence"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "quotes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Quotes"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "need": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NeedRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Suggestion and audit: the need of the link. Claim: the claimed need"
+          },
+          "alternative_need": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NeedRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Claim only: the need the model would pick instead"
+          },
+          "request": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TriageRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "support": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TriageSupport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "routing_score",
+          "label",
+          "model_confidence",
+          "rationale",
+          "quotes",
+          "created_at",
+          "need",
+          "alternative_need",
+          "request",
+          "support"
+        ],
+        "title": "TriageItem"
+      },
+      "TriageList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TriageItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "needs_review": {
+            "items": {
+              "$ref": "#/components/schemas/FailedRequest"
+            },
+            "type": "array",
+            "title": "Needs Review"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "needs_review"
+        ],
+        "title": "TriageList"
+      },
+      "TriageRequest": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "need_statement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Need Statement"
+          },
+          "persona": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "description",
+          "need_statement",
+          "persona"
+        ],
+        "title": "TriageRequest"
+      },
+      "TriageSupport": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "why_it_matters": {
+            "type": "string",
+            "title": "Why It Matters"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "claimed_need": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NeedRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "why_it_matters",
+          "severity",
+          "claimed_need",
+          "reason"
+        ],
+        "title": "TriageSupport"
+      },
+      "UnlinkResult": {
+        "properties": {
+          "request_id": {
+            "type": "integer",
+            "title": "Request Id"
+          },
+          "need_id": {
+            "type": "integer",
+            "title": "Need Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "request_id",
+          "need_id",
+          "title"
+        ],
+        "title": "UnlinkResult"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
       }
     }
   }
