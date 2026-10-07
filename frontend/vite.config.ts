@@ -24,6 +24,8 @@ export default defineConfig({
     },
   },
   server: {
+    // explicit IPv4: on Linux "localhost" can bind ::1 only, and Playwright and the docs use 127.0.0.1
+    host: process.env.WEB_HOST ?? '127.0.0.1',
     port: Number(process.env.WEB_PORT ?? 5173),
     strictPort: true,
     // xfwd: the API sees the browser's address (X-Forwarded-For), so per-client rate limits aren't shared by everyone

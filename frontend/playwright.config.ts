@@ -33,13 +33,14 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: [
-    { command: backend, url: `${API_URL}/requesters`, reuseExistingServer: false, timeout: 120_000 },
+    { command: backend, url: `${API_URL}/requesters`, reuseExistingServer: false, timeout: 180_000, stdout: 'pipe' },
     {
       command: 'npm run dev',
       env: { API_URL, WEB_PORT: String(WEB_PORT) },
       url: `http://127.0.0.1:${WEB_PORT}`,
       reuseExistingServer: false,
-      timeout: 60_000,
+      timeout: 120_000,
+      stdout: 'pipe',
     },
   ],
 })
