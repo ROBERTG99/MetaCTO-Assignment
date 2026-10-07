@@ -184,26 +184,29 @@ def test_need_detail_explains_its_origin_analysis_evidence_and_trail(
 
 
 def test_the_pm_sets_a_need_status_and_it_is_on_the_trail(client: TestClient, world: dict[str, Any]) -> None:
-    r = client.patch(f"/needs/{world['sso'].id}", json={"status": "planned", "by": "pm"})
+    body = {"status": "planned", "reason": "Rollout blocker", "by": "pm"}
+    r = client.patch(f"/needs/{world['sso'].id}/status", json=body)
     assert r.status_code == 200, r.text
-    assert r.json()["status"] == "planned"
-    trail = r.json()["audit_trail"]
-    assert (
-        trail[0]["kind"] == "status" and trail[0]["actor"] == "pm" and "open → planned" in trail[0]["summary"]
-    )
+    n = client.get(f"/needs/{world['sso'].id}").json()
+    assert n["status"] == "planned"
+    first = n["audit_trail"][0]
+    assert (first["kind"], first["actor"]) == ("status", "pm")
+    assert "open → planned" in first["summary"] and "Rollout blocker" in first["summary"]
 
 
 @pytest.mark.parametrize(
-    "bad", [{"status": "merged", "by": "pm"}, {"status": "planned"}, {"status": "nope", "by": "pm"}]
-)
+    "bad",
+    [{"status": "merged", "reason": "x", "by": "pm"}, {"status": "planned", "reason": "x"},
+     {"status": "nope", "reason": "x", "by": "pm"}],
+)  # fmt: skip
 def test_status_changes_are_validated(client: TestClient, world: dict[str, Any], bad: dict[str, str]) -> None:
-    assert client.patch(f"/needs/{world['sso'].id}", json=bad).status_code == 422
+    assert client.patch(f"/needs/{world['sso'].id}/status", json=bad).status_code == 422
 
 
 def test_a_merged_need_cannot_change_status(client: TestClient, make: Factory) -> None:
     target = make.need("SSO")
     gone = make.need("SSO again", status=NeedStatus.merged, merged_into_id=target.id)
-    r = client.patch(f"/needs/{gone.id}", json={"status": "planned", "by": "pm"})
+    r = client.patch(f"/needs/{gone.id}/status", json={"status": "planned", "reason": "x", "by": "pm"})
     assert r.status_code == 409
     assert_error(r.json(), "need_merged")
 
@@ -242,7 +245,11 @@ def test_ai_ops_reports_calls_cost_latency_acceptance_false_merges_and_the_succe
     # M2: one claim at the door against three new requests; nothing created as new was relinked by a PM
     assert (m["m2"]["claims"], m["m2"]["new_requests"], m["m2"]["deflection"]) == (1, 3, 0.25)
     assert (m["m2"]["new_need_requests"], m["m2"]["relinked_by_pm"], m["m2"]["leakage"]) == (1, 0, 0.0)
-    assert m["m3"]["value"] is None and "F7" in m["m3"]["note"]
+    assert (m["m3"]["value"], m["m3"]["completed"], m["m3"]["pending"]) == (
+        None,
+        0,
+        0,
+    )  # no status change yet
 
 
 def test_m1_counts_waiting_and_failed_requests_as_needing_a_pm(
@@ -311,12 +318,26 @@ def test_an_offline_claim_dispute_shows_baseline_parts_and_its_source(
     assert "new need" not in (item["rationale"] or "") and "claim" in (item["rationale"] or "")
 
 
-def test_setting_the_same_status_writes_no_history(client: TestClient, world: dict[str, Any]) -> None:
-    r = client.patch(f"/needs/{world['sso'].id}", json={"status": "open", "by": "pm"})
-    assert r.status_code == 200
-    assert not [e for e in r.json()["audit_trail"] if e["kind"] == "status"]
+def test_setting_the_same_status_is_refused_and_writes_no_history(
+    client: TestClient, world: dict[str, Any]
+) -> None:
+    r = client.patch(f"/needs/{world['sso'].id}/status", json={"status": "open", "reason": "x", "by": "pm"})
+    assert r.status_code == 409
+    assert_error(r.json(), "no_change")
+    trail = client.get(f"/needs/{world['sso'].id}").json()["audit_trail"]
+    assert not [e for e in trail if e["kind"] == "status"]
 
 
 def test_auto_linked_is_capped_newest_first_with_a_total(client: TestClient, world: dict[str, Any]) -> None:
     body = client.get("/triage").json()
     assert body["auto_linked_total"] == len(body["auto_linked"]) == 1
+
+
+def test_m1_ignores_informational_related_suggestions(
+    client: TestClient, world: dict[str, Any], db: Session
+) -> None:
+    before = client.get("/metrics").json()["m1"]["untouched"]
+    db.add(AISuggestion(request_id=world["first"].id, need_id=world["sso"].id, kind=SuggestionKind.related,
+                        label="related", state=SuggestionState.proposed))  # shown on the request, never decided  # fmt: skip
+    db.commit()
+    assert client.get("/metrics").json()["m1"]["untouched"] == before

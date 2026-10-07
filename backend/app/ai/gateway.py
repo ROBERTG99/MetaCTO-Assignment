@@ -16,7 +16,17 @@ from typing import Any, ClassVar, Protocol, TypeVar
 from pydantic import BaseModel, ValidationError
 
 from app.ai.redact import redact
-from app.ai.schemas import Adjudication, CandidateNeed, Extraction, FitRating, ProductArea, StrategicFit
+from app.ai.schemas import (
+    Adjudication,
+    CandidateNeed,
+    CsNote,
+    Extraction,
+    FitRating,
+    ProductArea,
+    RequesterUpdate,
+    StrategicFit,
+    UpdateDrafts,
+)
 from app.models import AIRun
 from app.scoring import Goal
 
@@ -148,6 +158,12 @@ class FakeLLM:
             )  # fmt: skip
         if step == "adjudicate":
             return Adjudication(judgments=[])  # no judgment means "different" for every candidate
+        if step == "stakeholder_update":
+            return UpdateDrafts(
+                requester_updates=[RequesterUpdate(requester_id=x["requester_id"], body=f"Update on {x['asked']}.")
+                                   for x in inputs["supporters"]],
+                cs_notes=[CsNote(account_id=a["account_id"], body=f"{a['name']}: status changed.") for a in inputs["accounts"]],
+            )  # fmt: skip
         if step == "strategic_fit":
             return StrategicFit(
                 ratings=[
@@ -170,6 +186,7 @@ PROMPT_FOR_STEP = {
     "extract": "extract_need_v1",
     "adjudicate": "adjudicate_v1",
     "strategic_fit": "strategic_fit_v1",
+    "stakeholder_update": "stakeholder_update_v1",
 }
 Check = Callable[[BaseModel], str | None]  # a problem the schema can't express, or None
 PLACEHOLDER = re.compile(r"\{\{(\w+)\}\}")
@@ -196,6 +213,11 @@ class Prompt:
 def _data(text: str) -> str:
     """Untrusted text as data: redacted, then escaped so it can't close or open our tags."""
     return html.escape(redact(text), quote=False)
+
+
+def _attr(text: str) -> str:
+    """Untrusted text inside an XML attribute: quotes are escaped too."""
+    return html.escape(redact(text), quote=True)
 
 
 def _scrub(value: Any) -> Any:
@@ -309,6 +331,67 @@ class Gateway:
         assert isinstance(out, StrategicFit)
         return out, run_id
 
+    def draft_updates(
+        self,
+        *,
+        need_title: str,
+        need_problem: str,
+        status: str,
+        reason: str,
+        target_date: str | None,
+        supporters: list[dict[str, Any]],
+        accounts: list[dict[str, Any]],
+        need_id: int | None = None,
+    ) -> tuple[UpdateDrafts, int]:
+        """Draft one personal update per supporter and one CS note per account. Drafts only: a PM approves."""
+        decision = (
+            f"new status: {html.escape(status)}\nreason (the PM's words): {_data(reason)}\n"
+            f"target date: {html.escape(target_date) if target_date else 'none set'}"
+        )
+        need = f"title: {_data(need_title)}\nproblem: {_data(need_problem)}"
+        people = "\n".join(
+            f'<supporter id="{x["requester_id"]}" name="{_attr(x["name"])}">\n{_data(x["asked"])}\n</supporter>'
+            for x in supporters
+        )
+        firms = "\n".join(
+            f'<account id="{a["account_id"]}" name="{_attr(a["name"])}">supporters: '
+            f"{_data(', '.join(a['supporters']))}</account>"
+            for a in accounts
+        )
+        values = {"decision": decision, "need": need, "supporters": people, "accounts": firms}
+        inputs = {"need": {"title": need_title, "problem": need_problem}, "status": status, "reason": reason,
+                  "target_date": target_date, "supporters": supporters, "accounts": accounts}  # fmt: skip
+        want_people = sorted(x["requester_id"] for x in supporters)
+        want_firms = sorted(a["account_id"] for a in accounts)
+
+        def everyone_once(out: BaseModel) -> str | None:
+            assert isinstance(out, UpdateDrafts)
+            got_people = sorted(u.requester_id for u in out.requester_updates)
+            got_firms = sorted(n.account_id for n in out.cs_notes)
+            if got_people != want_people or got_firms != want_firms:
+                return (
+                    f"write exactly one requester update for each supporter id {want_people} and one CS note "
+                    f"for each account id {want_firms} (got {got_people} and {got_firms})"
+                )
+            return None
+
+        # about 120 output tokens per message, with headroom; a max_tokens stop still gets one retry at double
+        limit = max(
+            self.steps["stakeholder_update"].max_tokens, 400 + 160 * (len(supporters) + len(accounts))
+        )
+        out, run_id = self._call(
+            "stakeholder_update",
+            UpdateDrafts,
+            values,
+            inputs,
+            None,
+            need_id,
+            everyone_once,
+            min(limit, 16_000),
+        )
+        assert isinstance(out, UpdateDrafts)
+        return out, run_id
+
     def _prompt(self, step: str) -> Prompt:
         name = PROMPT_FOR_STEP[step]
         if name not in self._prompts:
@@ -355,11 +438,13 @@ class Gateway:
         request_id: int | None,
         need_id: int | None = None,
         check: Check | None = None,
+        max_tokens: int | None = None,
     ) -> tuple[BaseModel, int]:
         """One logical call: at most one repair retry for bad output, one retry with a higher limit on max_tokens."""
         prompt, cfg = self._prompt(step), self.steps[step]
         self._price(step, cfg.model)  # fail before paying for a call we couldn't cost
-        user, max_tokens, inputs = prompt.render(values), cfg.max_tokens, _scrub(inputs)
+        user, inputs = prompt.render(values), _scrub(inputs)
+        max_tokens = max_tokens or cfg.max_tokens
         repaired = extended = False
         while True:
             started = time.perf_counter()
@@ -563,6 +648,31 @@ class OfflineClient:
         (("embed", "portal", "white-label"), "embedded"),
     ]
 
+    @staticmethod
+    def _drafts(inputs: dict[str, Any]) -> UpdateDrafts:
+        """Offline drafts: a fixed template filled with the PM's reason and each supporter's own request."""
+        title = str(inputs["need"]["title"])
+        status = str(inputs["status"]).replace("_", " ")
+        reason = str(inputs["reason"]).strip().rstrip(".") + "."
+        when = f" We're aiming for {inputs['target_date']}." if inputs.get("target_date") else ""
+        people = [
+            RequesterUpdate(
+                requester_id=x["requester_id"],
+                body=f"Hi {str(x['name']).split()[0]}, thanks for asking about \u201c{x['asked']}\u201d. "
+                f"We've marked \u201c{title}\u201d as {status}. {reason}{when}",
+            )
+            for x in inputs["supporters"]
+        ]
+        notes = [
+            CsNote(
+                account_id=a["account_id"],
+                body=f"{a['name']}: \u201c{title}\u201d is now {status}. Reason: {reason} "
+                f"Asked for by {', '.join(a['supporters'])}.",
+            )
+            for a in inputs["accounts"]
+        ]
+        return UpdateDrafts(requester_updates=people, cs_notes=notes)
+
     def complete(
         self,
         *,
@@ -575,6 +685,8 @@ class OfflineClient:
         effort: str | None,
         inputs: dict[str, Any],
     ) -> Reply:
+        if step == "stakeholder_update":
+            return Reply(self._drafts(inputs), Usage(0, 0), "offline-baseline")
         if step != "extract":
             raise TerminalError("offline mode has no adjudicator; the pipeline routes on similarity")
         text = str(inputs.get("text") or "")

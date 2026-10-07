@@ -73,11 +73,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /**
-         * Set a need's status (a human product decision)
-         * @description Appends to the status history, shown in the audit trail. 409 for a merged need.
-         */
-        patch: operations["set_status_needs__need_id__patch"];
+        patch?: never;
         trace?: never;
     };
     "/needs/{need_id}/support": {
@@ -94,6 +90,60 @@ export interface paths {
          * @description 201 the first time, 200 on a repeat by the same requester. Not counted until confirmed. 409 if the need was merged into another one.
          */
         post: operations["add_support_needs__need_id__support_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/needs/{need_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change a need's status (a human product decision) and queue the stakeholder drafts
+         * @description Saved at once; the worker then drafts a personal update per supporter and a CS note per account. Nothing is sent until a PM approves each draft. 409 for a merged need or the same status.
+         */
+        patch: operations["change_status_needs__need_id__status_patch"];
+        trace?: never;
+    };
+    "/needs/{need_id}/updates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Status changes with their drafted, approved and discarded stakeholder messages (PM view) */
+        get: operations["need_updates_needs__need_id__updates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/needs/{need_id}/status-changes/{change_id}/redraft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Draft the stakeholder messages again after drafting failed (spends one model call) */
+        post: operations["redraft_needs__need_id__status_changes__change_id__redraft_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -222,6 +272,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/updates/{update_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Edit a draft; the commitment check runs again on the new text */
+        patch: operations["edit_updates__update_id__patch"];
+        trace?: never;
+    };
+    "/updates/{update_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve and send to the (simulated) outbox; 409 while commitments are flagged */
+        post: operations["approve_updates__update_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/updates/{update_id}/discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Discard a draft */
+        post: operations["discard_updates__update_id__discard_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/outbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The simulated outbox: approved messages only */
+        get: operations["outbox_outbox_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -278,6 +396,22 @@ export interface components {
             /** Model */
             model?: string | null;
         };
+        /** CommitmentFlag */
+        CommitmentFlag: {
+            /** Phrase */
+            phrase: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "date" | "timing" | "promise";
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /** Reason */
+            reason: string;
+        };
         /**
          * Decision
          * @description Who decided. There is no auth yet (spec A3), so the PM names themselves.
@@ -329,6 +463,55 @@ export interface components {
              * @description Accounts counted with no ARR or pipeline value on record
              */
             gaps: string[];
+        };
+        /** DraftEdit */
+        DraftEdit: {
+            /** Body */
+            body: string;
+            /** By */
+            by: string;
+        };
+        /** DraftOut */
+        DraftOut: {
+            /** Id */
+            id: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "requester_update" | "cs_note";
+            /** Requester Id */
+            requester_id: number | null;
+            /** Requester Name */
+            requester_name: string | null;
+            /** Account Id */
+            account_id: number | null;
+            /** Account Name */
+            account_name: string | null;
+            /** Body */
+            body: string;
+            /**
+             * Original Body
+             * @description The AI's draft, before any PM edit
+             */
+            original_body: string;
+            /** Edited */
+            edited: boolean;
+            /**
+             * Flags
+             * @description The commitment check on the current body (code, not the model)
+             */
+            flags: components["schemas"]["CommitmentFlag"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "approved" | "discarded" | "superseded";
+            /** Approved By */
+            approved_by: string | null;
+            /** Approved At */
+            approved_at: string | null;
+            source: components["schemas"]["AISource"] | null;
         };
         /** ErrorDetail */
         ErrorDetail: {
@@ -509,8 +692,26 @@ export interface components {
         };
         /** M3Out */
         M3Out: {
-            /** Value */
+            /**
+             * Value
+             * @description Median seconds from a status change to its last supporter notified
+             */
             value: number | null;
+            /**
+             * Completed
+             * @description Status changes whose every personal update is approved
+             */
+            completed: number;
+            /**
+             * Pending
+             * @description Status changes with personal updates still waiting for approval
+             */
+            pending: number;
+            /**
+             * Not Notified
+             * @description Supporters whose personal update was discarded or never drafted
+             */
+            not_notified: number;
             /** Note */
             note: string;
         };
@@ -665,17 +866,6 @@ export interface components {
          * @enum {string}
          */
         NeedStatus: "open" | "planned" | "in_progress" | "shipped" | "declined" | "merged";
-        /** NeedStatusUpdate */
-        NeedStatusUpdate: {
-            /**
-             * Status
-             * @description A human product decision; merged is set only by merging
-             * @enum {string}
-             */
-            status: "open" | "planned" | "in_progress" | "shipped" | "declined";
-            /** By */
-            by: string;
-        };
         /** NeedSummary */
         NeedSummary: {
             /** Id */
@@ -717,6 +907,14 @@ export interface components {
              */
             created_at: string;
         };
+        /** NeedUpdates */
+        NeedUpdates: {
+            /**
+             * Changes
+             * @description Newest first, each with its drafts
+             */
+            changes: components["schemas"]["StatusChangeOut"][];
+        };
         /** OpsMetrics */
         OpsMetrics: {
             /** Runs */
@@ -741,6 +939,29 @@ export interface components {
             processed_requests: number;
             /** Cost Per Request */
             cost_per_request: number | null;
+        };
+        /** OutboxOut */
+        OutboxOut: {
+            /** Id */
+            id: number;
+            /** Update Id */
+            update_id: number;
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "requester" | "cs";
+            /** Recipient */
+            recipient: string;
+            /** Subject */
+            subject: string;
+            /** Body */
+            body: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /** PriorityBreakdown */
         PriorityBreakdown: {
@@ -1026,6 +1247,53 @@ export interface components {
             status: components["schemas"]["NeedStatus"];
             /** Score */
             score: number;
+        };
+        /**
+         * StatusChangeIn
+         * @description A product decision (spec §7): who, what, why, and a date only if the PM commits to one.
+         */
+        StatusChangeIn: {
+            /**
+             * Status
+             * @description merged is set only by merging
+             * @enum {string}
+             */
+            status: "open" | "planned" | "in_progress" | "shipped" | "declined";
+            /** Reason */
+            reason: string;
+            /**
+             * Target Date
+             * @description Set only if the PM commits to a date
+             */
+            target_date?: string | null;
+            /** By */
+            by: string;
+        };
+        /** StatusChangeOut */
+        StatusChangeOut: {
+            /** Id */
+            id: number;
+            /** Need Id */
+            need_id: number;
+            from_status: components["schemas"]["NeedStatus"];
+            to_status: components["schemas"]["NeedStatus"];
+            /** By */
+            by: string;
+            /** Reason */
+            reason: string;
+            /** Target Date */
+            target_date: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Drafts Status */
+            drafts_status: ("pending" | "drafted" | "failed" | "superseded") | null;
+            /** Drafts Error */
+            drafts_error: string | null;
+            /** Updates */
+            updates: components["schemas"]["DraftOut"][];
         };
         /** StrategicOut */
         StrategicOut: {
@@ -1420,59 +1688,6 @@ export interface operations {
             };
         };
     };
-    set_status_needs__need_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                need_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NeedStatusUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NeedDetail"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Unprocessable Entity */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
     add_support_needs__need_id__support_post: {
         parameters: {
             query?: never;
@@ -1504,6 +1719,153 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SupportOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    change_status_needs__need_id__status_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                need_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StatusChangeIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusChangeOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    need_updates_needs__need_id__updates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                need_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NeedUpdates"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    redraft_needs__need_id__status_changes__change_id__redraft_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                change_id: number;
+                need_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Decision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusChangeOut"];
                 };
             };
             /** @description Not Found */
@@ -1770,6 +2132,185 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OpsMetrics"];
+                };
+            };
+        };
+    };
+    edit_updates__update_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                update_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftEdit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    approve_updates__update_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                update_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Decision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    discard_updates__update_id__discard_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                update_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Decision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    outbox_outbox_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutboxOut"][];
                 };
             };
         };

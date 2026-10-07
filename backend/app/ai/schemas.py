@@ -94,3 +94,30 @@ class StrategicFit(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     ratings: list[FitRating]
+
+
+class RequesterUpdate(BaseModel):
+    """A personal update to one supporter, about what they asked for."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    requester_id: int = Field(description="The supporter's id, exactly as given in <supporters>")
+    body: str = Field(description="Two to four sentences; refers to what this person asked for")
+
+
+class CsNote(BaseModel):
+    """An internal note for customer success about one affected account."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    account_id: int = Field(description="The account's id, exactly as given in <accounts>")
+    body: str
+
+
+class UpdateDrafts(BaseModel):
+    """One personal update per supporter and one CS note per affected account. Drafts only: a PM approves."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    requester_updates: list[RequesterUpdate]
+    cs_notes: list[CsNote]

@@ -334,79 +334,6 @@
             "description": "Unprocessable Entity"
           }
         }
-      },
-      "patch": {
-        "tags": [
-          "needs"
-        ],
-        "summary": "Set a need's status (a human product decision)",
-        "description": "Appends to the status history, shown in the audit trail. 409 for a merged need.",
-        "operationId": "set_status_needs__need_id__patch",
-        "parameters": [
-          {
-            "name": "need_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "maximum": 9223372036854775807,
-              "minimum": 1,
-              "title": "Need Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/NeedStatusUpdate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NeedDetail"
-                }
-              }
-            }
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          }
-        }
       }
     },
     "/needs/{need_id}/support": {
@@ -460,6 +387,220 @@
               }
             },
             "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    },
+    "/needs/{need_id}/status": {
+      "patch": {
+        "tags": [
+          "needs"
+        ],
+        "summary": "Change a need's status (a human product decision) and queue the stakeholder drafts",
+        "description": "Saved at once; the worker then drafts a personal update per supporter and a CS note per account. Nothing is sent until a PM approves each draft. 409 for a merged need or the same status.",
+        "operationId": "change_status_needs__need_id__status_patch",
+        "parameters": [
+          {
+            "name": "need_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Need Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatusChangeIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusChangeOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    },
+    "/needs/{need_id}/updates": {
+      "get": {
+        "tags": [
+          "needs"
+        ],
+        "summary": "Status changes with their drafted, approved and discarded stakeholder messages (PM view)",
+        "operationId": "need_updates_needs__need_id__updates_get",
+        "parameters": [
+          {
+            "name": "need_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Need Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NeedUpdates"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    },
+    "/needs/{need_id}/status-changes/{change_id}/redraft": {
+      "post": {
+        "tags": [
+          "needs"
+        ],
+        "summary": "Draft the stakeholder messages again after drafting failed (spends one model call)",
+        "operationId": "redraft_needs__need_id__status_changes__change_id__redraft_post",
+        "parameters": [
+          {
+            "name": "change_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Change Id"
+            }
+          },
+          {
+            "name": "need_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Need Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Decision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusChangeOut"
+                }
+              }
+            }
           },
           "404": {
             "content": {
@@ -804,6 +945,253 @@
           }
         }
       }
+    },
+    "/updates/{update_id}": {
+      "patch": {
+        "tags": [
+          "updates"
+        ],
+        "summary": "Edit a draft; the commitment check runs again on the new text",
+        "operationId": "edit_updates__update_id__patch",
+        "parameters": [
+          {
+            "name": "update_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Update Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftEdit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    },
+    "/updates/{update_id}/approve": {
+      "post": {
+        "tags": [
+          "updates"
+        ],
+        "summary": "Approve and send to the (simulated) outbox; 409 while commitments are flagged",
+        "operationId": "approve_updates__update_id__approve_post",
+        "parameters": [
+          {
+            "name": "update_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Update Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Decision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    },
+    "/updates/{update_id}/discard": {
+      "post": {
+        "tags": [
+          "updates"
+        ],
+        "summary": "Discard a draft",
+        "operationId": "discard_updates__update_id__discard_post",
+        "parameters": [
+          {
+            "name": "update_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Update Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Decision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    },
+    "/outbox": {
+      "get": {
+        "tags": [
+          "updates"
+        ],
+        "summary": "The simulated outbox: approved messages only",
+        "operationId": "outbox_outbox_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OutboxOut"
+                  },
+                  "type": "array",
+                  "title": "Response Outbox Outbox Get"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -969,6 +1357,44 @@
         ],
         "title": "AuditEvent"
       },
+      "CommitmentFlag": {
+        "properties": {
+          "phrase": {
+            "type": "string",
+            "title": "Phrase"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "date",
+              "timing",
+              "promise"
+            ],
+            "title": "Kind"
+          },
+          "start": {
+            "type": "integer",
+            "title": "Start"
+          },
+          "end": {
+            "type": "integer",
+            "title": "End"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "phrase",
+          "kind",
+          "start",
+          "end",
+          "reason"
+        ],
+        "title": "CommitmentFlag"
+      },
       "Decision": {
         "properties": {
           "by": {
@@ -1090,6 +1516,171 @@
           "gaps"
         ],
         "title": "DemandOut"
+      },
+      "DraftEdit": {
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Body"
+          },
+          "by": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "By"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "body",
+          "by"
+        ],
+        "title": "DraftEdit"
+      },
+      "DraftOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "requester_update",
+              "cs_note"
+            ],
+            "title": "Kind"
+          },
+          "requester_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requester Id"
+          },
+          "requester_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requester Name"
+          },
+          "account_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Id"
+          },
+          "account_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Name"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "original_body": {
+            "type": "string",
+            "title": "Original Body",
+            "description": "The AI's draft, before any PM edit"
+          },
+          "edited": {
+            "type": "boolean",
+            "title": "Edited"
+          },
+          "flags": {
+            "items": {
+              "$ref": "#/components/schemas/CommitmentFlag"
+            },
+            "type": "array",
+            "title": "Flags",
+            "description": "The commitment check on the current body (code, not the model)"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "approved",
+              "discarded",
+              "superseded"
+            ],
+            "title": "Status"
+          },
+          "approved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By"
+          },
+          "approved_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AISource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "requester_id",
+          "requester_name",
+          "account_id",
+          "account_name",
+          "body",
+          "original_body",
+          "edited",
+          "flags",
+          "status",
+          "approved_by",
+          "approved_at",
+          "source"
+        ],
+        "title": "DraftOut"
       },
       "ErrorDetail": {
         "properties": {
@@ -1553,7 +2144,23 @@
                 "type": "null"
               }
             ],
-            "title": "Value"
+            "title": "Value",
+            "description": "Median seconds from a status change to its last supporter notified"
+          },
+          "completed": {
+            "type": "integer",
+            "title": "Completed",
+            "description": "Status changes whose every personal update is approved"
+          },
+          "pending": {
+            "type": "integer",
+            "title": "Pending",
+            "description": "Status changes with personal updates still waiting for approval"
+          },
+          "not_notified": {
+            "type": "integer",
+            "title": "Not Notified",
+            "description": "Supporters whose personal update was discarded or never drafted"
           },
           "note": {
             "type": "string",
@@ -1563,6 +2170,9 @@
         "type": "object",
         "required": [
           "value",
+          "completed",
+          "pending",
+          "not_notified",
           "note"
         ],
         "title": "M3Out"
@@ -2023,35 +2633,6 @@
         ],
         "title": "NeedStatus"
       },
-      "NeedStatusUpdate": {
-        "properties": {
-          "status": {
-            "type": "string",
-            "enum": [
-              "open",
-              "planned",
-              "in_progress",
-              "shipped",
-              "declined"
-            ],
-            "title": "Status",
-            "description": "A human product decision; merged is set only by merging"
-          },
-          "by": {
-            "type": "string",
-            "maxLength": 100,
-            "minLength": 1,
-            "title": "By"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "status",
-          "by"
-        ],
-        "title": "NeedStatusUpdate"
-      },
       "NeedSummary": {
         "properties": {
           "id": {
@@ -2154,6 +2735,23 @@
         ],
         "title": "NeedSummary"
       },
+      "NeedUpdates": {
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/StatusChangeOut"
+            },
+            "type": "array",
+            "title": "Changes",
+            "description": "Newest first, each with its drafts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "changes"
+        ],
+        "title": "NeedUpdates"
+      },
       "OpsMetrics": {
         "properties": {
           "runs": {
@@ -2234,6 +2832,54 @@
           "cost_per_request"
         ],
         "title": "OpsTotals"
+      },
+      "OutboxOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "update_id": {
+            "type": "integer",
+            "title": "Update Id"
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "requester",
+              "cs"
+            ],
+            "title": "Channel"
+          },
+          "recipient": {
+            "type": "string",
+            "title": "Recipient"
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "update_id",
+          "channel",
+          "recipient",
+          "subject",
+          "body",
+          "created_at"
+        ],
+        "title": "OutboxOut"
       },
       "PriorityBreakdown": {
         "properties": {
@@ -3094,6 +3740,149 @@
           "score"
         ],
         "title": "SimilarNeed"
+      },
+      "StatusChangeIn": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "planned",
+              "in_progress",
+              "shipped",
+              "declined"
+            ],
+            "title": "Status",
+            "description": "merged is set only by merging"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason"
+          },
+          "target_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Date",
+            "description": "Set only if the PM commits to a date"
+          },
+          "by": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "By"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "reason",
+          "by"
+        ],
+        "title": "StatusChangeIn",
+        "description": "A product decision (spec §7): who, what, why, and a date only if the PM commits to one."
+      },
+      "StatusChangeOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "need_id": {
+            "type": "integer",
+            "title": "Need Id"
+          },
+          "from_status": {
+            "$ref": "#/components/schemas/NeedStatus"
+          },
+          "to_status": {
+            "$ref": "#/components/schemas/NeedStatus"
+          },
+          "by": {
+            "type": "string",
+            "title": "By"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "target_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Date"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "drafts_status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "drafted",
+                  "failed",
+                  "superseded"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drafts Status"
+          },
+          "drafts_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drafts Error"
+          },
+          "updates": {
+            "items": {
+              "$ref": "#/components/schemas/DraftOut"
+            },
+            "type": "array",
+            "title": "Updates"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "need_id",
+          "from_status",
+          "to_status",
+          "by",
+          "reason",
+          "target_date",
+          "created_at",
+          "drafts_status",
+          "drafts_error",
+          "updates"
+        ],
+        "title": "StatusChangeOut"
       },
       "StrategicOut": {
         "properties": {

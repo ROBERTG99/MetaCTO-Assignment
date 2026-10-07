@@ -136,10 +136,7 @@ export function RequesterNeedPage() {
               <li key={u.id}>
                 <Card className="gap-1 p-4">
                   <p>{u.body}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {humanize(u.kind)}
-                    {u.requester_name ? ` · ${u.requester_name}` : ''} · {when(u.approved_at)}
-                  </p>
+                  <p className="text-xs text-muted-foreground">From the product team · {when(u.approved_at)}</p>
                 </Card>
               </li>
             ))}

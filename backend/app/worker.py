@@ -18,7 +18,17 @@ from sqlmodel import Session, col, select
 
 from app.ai.gateway import TerminalError, TransientError
 from app.ai.pipeline import Deps, dispute_claim, process_claim, process_fit, process_request
-from app.models import Need, NeedStatus, Request, RequestStatus, Support, SupportLinkStatus, utcnow
+from app.models import (
+    Need,
+    NeedStatus,
+    NeedStatusChange,
+    Request,
+    RequestStatus,
+    Support,
+    SupportLinkStatus,
+    utcnow,
+)
+from app.services.updates import process_drafts
 
 log = logging.getLogger("distill.worker")
 
@@ -90,6 +100,20 @@ class Worker:
                 s.commit()
                 self._claim(s, sup.id)
                 return f"claim:{sup.id}"
+            changes = s.exec(
+                select(NeedStatusChange)
+                .where(NeedStatusChange.drafts_status == "pending")
+                .order_by(col(NeedStatusChange.created_at), col(NeedStatusChange.id))
+            ).all()
+            change = next(
+                (c for c in changes if self._ready(c.drafts_attempts, c.drafts_started_at, now)), None
+            )
+            if change is not None and change.id is not None:  # offline mode drafts from a template
+                change.drafts_attempts, change.drafts_started_at = change.drafts_attempts + 1, now
+                s.add(change)
+                s.commit()
+                self._drafts(s, change.id)
+                return f"drafts:{change.id}"
             if self.deps.mode != "llm":
                 return None
             due = s.exec(
@@ -105,6 +129,26 @@ class Worker:
                 self._fit(s, need.id)
                 return f"fit:{need.id}"
         return None
+
+    def _drafts(self, s: Session, change_id: int) -> None:
+        try:
+            process_drafts(s, change_id, self.deps)
+        except Exception as exc:  # transient errors retry with backoff; anything else fails the drafting now
+            s.rollback()
+            change = s.get(NeedStatusChange, change_id)
+            assert change is not None
+            transient = isinstance(exc, TransientError)
+            reason = (
+                str(exc)
+                if isinstance(exc, TransientError | TerminalError)
+                else f"internal error: {type(exc).__name__}: {exc}"
+            )
+            if transient and change.drafts_attempts < self.cfg.max_attempts:
+                change.drafts_error = reason
+            else:  # the status stands; the PM writes the messages, or retries later
+                change.drafts_status, change.drafts_error = "failed", reason
+            s.add(change)
+            s.commit()
 
     def _fit(self, s: Session, need_id: int) -> None:
         try:

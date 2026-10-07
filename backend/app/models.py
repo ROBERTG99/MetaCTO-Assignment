@@ -248,13 +248,23 @@ class GoalRating(SQLModel, table=True):
 
 
 class NeedStatusChange(SQLModel, table=True):
-    """Append-only history of a need's status: a human product decision (spec §7), and M3's start time."""
+    """Append-only history of a need's status: a human product decision (spec §7), and M3's start time.
+
+    It is also the job that drafts the stakeholder updates (ADR 0007 pattern): drafts_status pending ->
+    drafted, or failed with a reason. The status itself is saved first; drafting never blocks it.
+    """
 
     id: int | None = Field(default=None, primary_key=True)
     need_id: int = Field(foreign_key="need.id", index=True)
     from_status: NeedStatus
     to_status: NeedStatus
     by: str
+    reason: str = ""
+    target_date: date | None = None  # a date the PM committed to, if any
+    drafts_status: str | None = Field(default=None, index=True)  # pending | drafted | failed
+    drafts_attempts: int = 0
+    drafts_started_at: datetime | None = None
+    drafts_error: str | None = None
     created_at: datetime = Field(default_factory=utcnow, index=True)
 
 
@@ -264,10 +274,38 @@ class StakeholderUpdate(SQLModel, table=True):
     kind: str  # requester_update | cs_note
     requester_id: int | None = Field(default=None, foreign_key="requester.id")
     account_id: int | None = Field(default=None, foreign_key="account.id")
+    status_change_id: int | None = Field(default=None, foreign_key="needstatuschange.id", index=True)
     body: str
+    original_body: str = ""  # the AI's draft, kept so an edit is visible
+    approved_body: str | None = None  # the text as approved: what was sent and what the requester sees
+    edited_by: str | None = None
+    edited_at: datetime | None = None
     flagged_commitments: list[Any] = Field(default_factory=list, sa_column=Column(JSON))
-    status: str = "draft"  # draft | approved | discarded
+    status: str = "draft"  # draft | approved | discarded | superseded (a newer status change replaced it)
     approved_by: str | None = None
     approved_at: datetime | None = None
     ai_run_id: int | None = Field(default=None, foreign_key="airun.id")
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class Notification(SQLModel, table=True):
+    """A supporter was told about a decision: written when the PM approves their personal update (M3)."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    need_id: int = Field(foreign_key="need.id", index=True)
+    requester_id: int = Field(foreign_key="requester.id", index=True)
+    update_id: int = Field(foreign_key="stakeholderupdate.id")
+    status_change_id: int | None = Field(default=None, foreign_key="needstatuschange.id")
+    notified_at: datetime = Field(default_factory=utcnow)
+
+
+class OutboxMessage(SQLModel, table=True):
+    """The simulated outbox: approved messages land here (and in the app); nothing is sent anywhere else."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    update_id: int = Field(foreign_key="stakeholderupdate.id", index=True)
+    channel: str  # requester | cs
+    recipient: str
+    subject: str
+    body: str
     created_at: datetime = Field(default_factory=utcnow)

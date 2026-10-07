@@ -36,6 +36,7 @@ def build_deps(engine: Engine, config: Path = CONFIG) -> Deps:
             model[llm["models"]["adjudicate"]], 4000, llm.get("effort", {}).get("adjudicate")
         ),
         "strategic_fit": StepConfig(model[priorities.fit_model], 1500),
+        "stakeholder_update": StepConfig(settings.fast_model if live else "offline-baseline", 3000),
     }
     prices = yaml.safe_load((config / "prices.yaml").read_text(encoding="utf-8"))
     gateway = Gateway(client=client, steps=steps, prices=prices, record=recorder(engine))

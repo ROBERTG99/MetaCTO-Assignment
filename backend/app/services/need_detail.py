@@ -7,7 +7,6 @@ from typing import Any
 from sqlalchemy import or_
 from sqlmodel import Session, col, select
 
-from app.errors import AppError, not_found
 from app.models import (
     AIRun,
     AISuggestion,
@@ -15,14 +14,12 @@ from app.models import (
     LinkAction,
     LinkEvent,
     Need,
-    NeedStatus,
     NeedStatusChange,
     Request,
     Requester,
     StakeholderUpdate,
     SuggestionKind,
     SuggestionState,
-    utcnow,
 )
 
 
@@ -107,10 +104,14 @@ def updates(session: Session, need_id: int) -> list[dict[str, Any]]:
     rows = session.exec(
         select(StakeholderUpdate, Requester)
         .join(Requester, isouter=True)
-        .where(StakeholderUpdate.need_id == need_id, StakeholderUpdate.status == "approved")
+        .where(
+            StakeholderUpdate.need_id == need_id,
+            StakeholderUpdate.status == "approved",
+            StakeholderUpdate.kind == "requester_update",  # CS notes are internal: the PM view only
+        )
         .order_by(col(StakeholderUpdate.approved_at).desc())
     ).all()
-    return [{"id": u.id, "kind": u.kind, "requester_id": u.requester_id, "body": u.body, "requester_name": p.name if p else None,
+    return [{"id": u.id, "kind": u.kind, "requester_id": u.requester_id, "body": u.approved_body or u.body, "requester_name": p.name if p else None,
              "approved_at": u.approved_at} for u, p in rows]  # fmt: skip
 
 
@@ -126,7 +127,8 @@ def audit_trail(session: Session, need: Need, member_ids: list[int]) -> list[dic
                        "summary": f"{what} {verb} by {e.actor}{score}{reason}", "request_id": e.request_id})  # fmt: skip
     for c in session.exec(select(NeedStatusChange).where(NeedStatusChange.need_id == need.id)).all():
         events.append({"at": c.created_at, "kind": "status", "actor": c.by,
-                       "summary": f"Status {c.from_status} → {c.to_status}"})  # fmt: skip
+                       "summary": f"Status {c.from_status} → {c.to_status}: {c.reason}" if c.reason
+                       else f"Status {c.from_status} → {c.to_status}"})  # fmt: skip
     for s in session.exec(
         select(AISuggestion).where(AISuggestion.need_id == need.id, col(AISuggestion.decided_at).is_not(None))
     ).all():
@@ -141,18 +143,3 @@ def audit_trail(session: Session, need: Need, member_ids: list[int]) -> list[dic
                        "request_id": run.request_id})  # fmt: skip
     events.sort(key=lambda e: _aware(e["at"]), reverse=True)
     return events
-
-
-def set_status(session: Session, need_id: int, status: str, by: str) -> None:
-    """A human product decision (spec §7). Appends to the status history; merged is set only by merging."""
-    need = session.get(Need, need_id)
-    if need is None:
-        raise not_found("Need", need_id)
-    if need.status == NeedStatus.merged:
-        raise AppError(409, "need_merged", f"Need {need_id} was merged into need {need.merged_into_id}")
-    target = NeedStatus(status)
-    if need.status != target:
-        session.add(NeedStatusChange(need_id=need_id, from_status=need.status, to_status=target, by=by))
-        need.status, need.updated_at = target, utcnow()
-        session.add(need)
-        session.commit()

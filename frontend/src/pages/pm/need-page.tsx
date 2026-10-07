@@ -1,6 +1,5 @@
 import { useId, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router'
-import { toast } from 'sonner'
 
 import { ApiError } from '@/api/client'
 import { useNeed } from '@/api/queries'
@@ -11,12 +10,11 @@ import { PageHeader } from '@/components/page-header'
 import { StatusBadge } from '@/components/status-badge'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { NEED_STATUS, SEGMENT, SEVERITY, SUPPORT_STATUS, humanize, money, score, sourceLabel, when } from '@/lib/labels'
+import { SEGMENT, SEVERITY, SUPPORT_STATUS, humanize, money, score, sourceLabel, when } from '@/lib/labels'
 
 import { BreakdownView } from './breakdown'
-import { useSetNeedStatus, type NeedStatus } from './hooks'
+import { ChangeStatusDialog, StakeholderUpdates } from './updates'
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   const id = useId()
@@ -47,7 +45,6 @@ export function PmNeedPage() {
   const { needId } = useParams()
   const id = Number(needId)
   const need = useNeed(id)
-  const setStatus = useSetNeedStatus(id)
 
   if (!Number.isFinite(id) || (need.error instanceof ApiError && need.error.status === 404)) {
     return <EmptyState title="Need not found" description="This need doesn't exist, or it was merged into another one." />
@@ -60,7 +57,7 @@ export function PmNeedPage() {
   const origin = n.origin
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <PageHeader
         title={n.title}
         description={
@@ -77,32 +74,12 @@ export function PmNeedPage() {
             )}
           </span>
         }
-        actions={
-          <Select
-            value={n.status}
-            disabled={merged || setStatus.isPending}
-            onValueChange={(value) =>
-              setStatus.mutate(value as NeedStatus, {
-                onSuccess: () => toast.success(`Status set to ${NEED_STATUS[value] ?? value}`),
-                onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not change the status.'),
-              })
-            }
-          >
-            <SelectTrigger aria-label="Status" className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(NEED_STATUS)
-                .filter(([k]) => k !== 'merged' || merged)
-                .map(([k, label]) => (
-                  <SelectItem key={k} value={k} disabled={k === 'merged'}>
-                    {label}
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
-        }
+        actions={<ChangeStatusDialog needId={id} current={n.status} disabled={merged} />}
       />
+
+      <Section title="Stakeholder updates">
+        <StakeholderUpdates needId={id} />
+      </Section>
 
       <Section title="Need">
         <Card className="p-4">

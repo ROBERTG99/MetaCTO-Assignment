@@ -291,11 +291,77 @@ class NeedDetail(NeedSummary):
 SettableStatus = Literal["open", "planned", "in_progress", "shipped", "declined"]
 
 
-class NeedStatusUpdate(BaseModel):
+class StatusChangeIn(BaseModel):
+    """A product decision (spec §7): who, what, why, and a date only if the PM commits to one."""
+
     model_config = ConfigDict(extra="forbid")
 
-    status: SettableStatus = Field(description="A human product decision; merged is set only by merging")
+    status: SettableStatus = Field(description="merged is set only by merging")
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+    target_date: date | None = Field(None, description="Set only if the PM commits to a date")
     by: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+
+
+class CommitmentFlag(BaseModel):
+    phrase: str
+    kind: Literal["date", "timing", "promise"]
+    start: int
+    end: int
+    reason: str
+
+
+class DraftOut(BaseModel):
+    id: int
+    kind: Literal["requester_update", "cs_note"]
+    requester_id: int | None
+    requester_name: str | None
+    account_id: int | None
+    account_name: str | None
+    body: str
+    original_body: str = Field(description="The AI's draft, before any PM edit")
+    edited: bool
+    flags: list[CommitmentFlag] = Field(
+        description="The commitment check on the current body (code, not the model)"
+    )
+    status: Literal["draft", "approved", "discarded", "superseded"]
+    approved_by: str | None
+    approved_at: datetime | None
+    source: AISource | None
+
+
+class StatusChangeOut(BaseModel):
+    id: int
+    need_id: int
+    from_status: NeedStatus
+    to_status: NeedStatus
+    by: str
+    reason: str
+    target_date: date | None
+    created_at: datetime
+    drafts_status: Literal["pending", "drafted", "failed", "superseded"] | None
+    drafts_error: str | None
+    updates: list[DraftOut]
+
+
+class NeedUpdates(BaseModel):
+    changes: list[StatusChangeOut] = Field(description="Newest first, each with its drafts")
+
+
+class DraftEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    body: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
+    by: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+
+
+class OutboxOut(BaseModel):
+    id: int
+    update_id: int
+    channel: Literal["requester", "cs"]
+    recipient: str
+    subject: str
+    body: str
+    created_at: datetime
 
 
 class NeedRef(BaseModel):
@@ -507,7 +573,12 @@ class M2Out(BaseModel):
 
 
 class M3Out(BaseModel):
-    value: float | None
+    value: float | None = Field(
+        description="Median seconds from a status change to its last supporter notified"
+    )
+    completed: int = Field(description="Status changes whose every personal update is approved")
+    pending: int = Field(description="Status changes with personal updates still waiting for approval")
+    not_notified: int = Field(description="Supporters whose personal update was discarded or never drafted")
     note: str
 
 

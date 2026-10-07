@@ -6,6 +6,7 @@ stored, and nothing is estimated. M3 needs F7 (stakeholder updates), which isn't
 
 import math
 from collections import defaultdict
+from datetime import UTC
 from typing import Any
 
 from sqlmodel import Session, select
@@ -16,8 +17,10 @@ from app.models import (
     LinkAction,
     LinkActor,
     LinkEvent,
+    NeedStatusChange,
     Request,
     RequestStatus,
+    StakeholderUpdate,
     SuggestionKind,
     SuggestionState,
     Support,
@@ -87,8 +90,12 @@ def overview(session: Session) -> dict[str, Any]:
     pm_events = {e.request_id for e in events if e.actor == LinkActor.pm and e.request_id is not None}
     pm_decisions = {s.request_id for s in suggestions if s.request_id is not None and s.decided_by
                     and s.state in (SuggestionState.accepted, SuggestionState.rejected, SuggestionState.undone)}  # fmt: skip
-    waiting = {
-        s.request_id for s in suggestions if s.request_id is not None and s.state == SuggestionState.proposed
+    waiting = {  # a suggestion in the PM's inbox; "related" ones are informational and never decided
+        s.request_id
+        for s in suggestions
+        if s.request_id is not None
+        and s.state == SuggestionState.proposed
+        and s.kind == SuggestionKind.duplicate
     }
     touched = pm_events | pm_decisions | waiting | failed
     untouched = sum(r.id not in touched for r in finished)
@@ -143,9 +150,52 @@ def overview(session: Session) -> dict[str, Any]:
             "note": "Deflection counts every support (each starts as a claim at the door). Leakage needs a manual "
             "relink action, which the inbox doesn't have yet, so it stays 0 until one exists.",
         },
-        "m3": {
-            "value": None,
-            "note": "Decision-loop latency needs F7 (stakeholder updates), which isn't built "
-            "yet: time from a need's status change to every supporter's approved update.",
-        },
+        "m3": _m3(session),
     }
+
+
+def _m3(session: Session) -> dict[str, Any]:
+    rows: dict[int, tuple[Any, list[tuple[str, Any]]]] = {}
+    for c in session.exec(select(NeedStatusChange)).all():
+        if c.id is not None:
+            rows[c.id] = (c.created_at, [])
+    for u in session.exec(
+        select(StakeholderUpdate).where(StakeholderUpdate.kind == "requester_update")
+    ).all():
+        if u.status_change_id in rows:
+            rows[u.status_change_id][1].append((u.status, u.approved_at))
+    return m3_from(list(rows.values()))
+
+
+def m3_from(changes: list[tuple[Any, list[tuple[str, Any]]]]) -> dict[str, Any]:
+    """M3 decision-loop latency from (change time, [(personal update status, approved_at)]) per status change.
+
+    A change is complete when every personal update that wasn't superseded or discarded is approved; its
+    latency runs to the last approval. Discarded updates are supporters never told, counted apart so the
+    median isn't flattered by them. Superseded drafts belong to a decision that was replaced.
+    """
+    latencies: list[float] = []
+    pending = not_notified = 0
+    for created_at, updates in changes:
+        live = [(st, at) for st, at in updates if st not in ("superseded", "discarded")]
+        not_notified += sum(st == "discarded" for st, _ in updates)
+        if not live:
+            continue
+        if any(st == "draft" for st, _ in live):
+            pending += 1
+            continue
+        last = max(_aware(at) for _, at in live if at is not None)
+        latencies.append((last - _aware(created_at)).total_seconds())
+    latencies.sort()
+    n = len(latencies)
+    median = (
+        None if n == 0 else latencies[n // 2] if n % 2 else (latencies[n // 2 - 1] + latencies[n // 2]) / 2
+    )
+    return {"value": median, "completed": n, "pending": pending, "not_notified": not_notified,
+            "note": "Median time from a need's status change to the PM approving the last supporter's personal "
+            "update (every supporter notified). Pending changes still have drafts waiting; discarded updates are "
+            "supporters never told."}  # fmt: skip
+
+
+def _aware(t: Any) -> Any:
+    return t if t.tzinfo else t.replace(tzinfo=UTC)

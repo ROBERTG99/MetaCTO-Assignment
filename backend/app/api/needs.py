@@ -1,10 +1,11 @@
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Path, Query, Request, Response
 from sqlmodel import Session
 
 from app.ai.pipeline import Deps
 from app.api.deps import get_deps
+from app.api.triage import Decision
 from app.db import get_session
 from app.models import NeedStatus, Segment
 from app.schemas import (
@@ -13,13 +14,15 @@ from app.schemas import (
     NeedDetail,
     NeedPage,
     NeedSort,
-    NeedStatusUpdate,
+    NeedUpdates,
     SimilarNeed,
+    StatusChangeIn,
+    StatusChangeOut,
     SupportCreate,
     SupportOut,
 )
 from app.services import needs as service
-from app.services import triage
+from app.services import triage, updates
 
 router = APIRouter(tags=["needs"])
 NeedId = Path(ge=1, le=MAX_ID)
@@ -102,19 +105,41 @@ def add_support(
 
 
 @router.patch(
-    "/needs/{need_id}",
-    response_model=NeedDetail,
+    "/needs/{need_id}/status",
+    response_model=StatusChangeOut,
     responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 422: {"model": ErrorResponse}},
-    summary="Set a need's status (a human product decision)",
-    description="Appends to the status history, shown in the audit trail. 409 for a merged need.",
+    summary="Change a need's status (a human product decision) and queue the stakeholder drafts",
+    description="Saved at once; the worker then drafts a personal update per supporter and a CS note per "
+    "account. Nothing is sent until a PM approves each draft. 409 for a merged need or the same status.",
 )
-def set_status(
-    body: NeedStatusUpdate,
+def change_status(
+    body: StatusChangeIn, need_id: int = NeedId, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    change = updates.change_status(session, need_id, body.status, body.reason, body.target_date, body.by)
+    return updates.change_out(session, change)
+
+
+@router.get(
+    "/needs/{need_id}/updates",
+    response_model=NeedUpdates,
+    responses={404: {"model": ErrorResponse}, 422: {"model": ErrorResponse}},
+    summary="Status changes with their drafted, approved and discarded stakeholder messages (PM view)",
+)
+def need_updates(need_id: int = NeedId, session: Session = Depends(get_session)) -> dict[str, Any]:
+    return updates.list_for_need(session, need_id)
+
+
+@router.post(
+    "/needs/{need_id}/status-changes/{change_id}/redraft",
+    response_model=StatusChangeOut,
+    responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 422: {"model": ErrorResponse}},
+    summary="Draft the stakeholder messages again after drafting failed (spends one model call)",
+)
+def redraft(
+    body: Decision,
+    change_id: Annotated[int, Path(ge=1, le=MAX_ID)],
     need_id: int = NeedId,
     session: Session = Depends(get_session),
-    deps: Deps = Depends(get_deps),
-) -> NeedDetail:
-    from app.services import need_detail
-
-    need_detail.set_status(session, need_id, body.status, body.by)
-    return service.get_need(session, need_id, deps.priorities)
+) -> dict[str, Any]:
+    change = updates.redraft(session, need_id, change_id)
+    return updates.change_out(session, change)

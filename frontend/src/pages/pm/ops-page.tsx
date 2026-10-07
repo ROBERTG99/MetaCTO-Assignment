@@ -14,7 +14,7 @@ type Rate = Schemas['RateOut']
 
 function Metric({ title, value, children, badge }: { title: string; value: ReactNode; children?: ReactNode; badge?: ReactNode }) {
   return (
-    <Card className="gap-2 p-4">
+    <Card role="group" aria-label={title} className="gap-2 p-4">
       <div className="flex items-start justify-between gap-2">
         <h3 className="text-sm text-muted-foreground">{title}</h3>
         {badge}
@@ -58,6 +58,14 @@ export function OpsPage() {
       )}
     </div>
   )
+}
+
+/** Seconds as the largest sensible unit: "42 s", "7 min", "3.5 h", "2.1 days". */
+function duration(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)} s`
+  if (seconds < 3600) return `${Math.round(seconds / 60)} min`
+  if (seconds < 86400) return `${(seconds / 3600).toFixed(1)} h`
+  return `${(seconds / 86400).toFixed(1)} days`
 }
 
 function Body({ m }: { m: Schemas['OpsMetrics'] }) {
@@ -123,8 +131,18 @@ function Body({ m }: { m: Schemas['OpsMetrics'] }) {
             </p>
             <p className="text-muted-foreground">{m.m2.note}</p>
           </Metric>
-          <Metric title="M3 · Decision-loop latency" value={m.m3.value == null ? 'Not measured yet' : String(m.m3.value)}>
-            <p>{m.m3.note}</p>
+          <Metric title="M3 · Decision-loop latency" value={m.m3.value == null ? 'Not measured yet' : duration(m.m3.value)}>
+            <p>median time from a status change to every supporter notified</p>
+            <p>
+              {m.m3.completed} {m.m3.completed === 1 ? 'decision' : 'decisions'} with every supporter notified · {m.m3.pending} waiting for
+              approval
+            </p>
+            {m.m3.not_notified > 0 && (
+              <p>
+                {m.m3.not_notified} {m.m3.not_notified === 1 ? 'supporter was' : 'supporters were'} never told (update discarded)
+              </p>
+            )}
+            <p className="text-muted-foreground">{m.m3.note}</p>
           </Metric>
         </div>
       </section>

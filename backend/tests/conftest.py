@@ -57,6 +57,7 @@ def deps(engine: Engine, fake_llm: FakeLLM) -> Deps:
         "extract": StepConfig("claude-haiku-4-5", 2000),
         "adjudicate": StepConfig("claude-sonnet-5-5", 4000, "low"),
         "strategic_fit": StepConfig("claude-haiku-4-5", 1500),
+        "stakeholder_update": StepConfig("claude-haiku-4-5", 3000),
     }
     prices = {
         "claude-haiku-4-5": {"input": 1.0, "output": 5.0},

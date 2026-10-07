@@ -8,7 +8,6 @@ import { PM_NAME } from '@/app/session-constants'
 export type TriageItem = Schemas['TriageItem']
 export type TriageList = Schemas['TriageList']
 export type QuadrantNeed = Schemas['QuadrantNeed']
-export type NeedStatus = Schemas['NeedStatusUpdate']['status']
 
 export const TRIAGE_POLL_MS = 3000
 
@@ -95,26 +94,16 @@ export function useRankedNeeds() {
   })
 }
 
-export function useSetNeedStatus(needId: number) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: async (status: NeedStatus) =>
-      unwrap(
-        await api.PATCH('/needs/{need_id}', {
-          params: { path: { need_id: needId } },
-          body: { status, by: PM_NAME },
-        }),
-      ),
-    onSuccess: (detail) => qc.setQueryData(keys.need(needId), detail),
-    onSettled: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: keys.need(needId) }),
-        qc.invalidateQueries({ queryKey: keys.needs() }),
-        qc.invalidateQueries({ queryKey: keys.quadrant }),
-      ]),
-  })
-}
-
 export function useMetrics() {
   return useQuery({ queryKey: keys.metrics, queryFn: async () => unwrap(await api.GET('/metrics')) })
+}
+
+export function useNeedUpdates(needId: number) {
+  return useQuery({
+    queryKey: keys.needUpdates(needId),
+    queryFn: async () =>
+      unwrap(await api.GET('/needs/{need_id}/updates', { params: { path: { need_id: needId } } })),
+    // poll while the worker is drafting, so drafts appear without a reload
+    refetchInterval: (q) => (q.state.data?.changes.some((c) => c.drafts_status === 'pending') ? 1500 : false),
+  })
 }
