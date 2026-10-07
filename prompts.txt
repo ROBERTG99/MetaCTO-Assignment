@@ -128,3 +128,90 @@ SUMMARY:
 - prompts.audit.jsonl has this prompt as line 1, plus a 2nd line: the reviewer's hand-back message, which Claude Code delivered through UserPromptSubmit. Left as is (append-only); reported.
 - No make check target exists yet (only check-hooks), so the quality gate is the hook test run above.
 - Committed "chore(harness): apply review fixes" with prompts.audit.jsonl, then pushed.
+
+---
+[#6] 2026-10-07T14:20:30Z
+PROMPT:
+Here is the assignment from MetaCTO, pasted below. Save it verbatim to docs/assignment.md; it's our source of truth from now on.
+
+Then analyze it the way someone reviewing 50 of these submissions would:
+1. Explicit requirements (R1, R2, ...): every sentence that creates an obligation, including setup and submission.
+2. The questions the brief says I must be able to explain (Q1, Q2, ...).
+3. Implicit criteria: what separates a great submission from an adequate one, given they say they care more about how AI is incorporated than about the feature, and about "real-world agentic systems" and "production-ready".
+4. Constraints and traps: time guidance, deadline, public repo, prompt logging, anything easy to miss.
+
+Then write docs/requirements.md as a traceability matrix with columns: ID, requirement, how we satisfy it, how we prove it (test, eval or doc), status (todo/done). Add rows (D1, D2, ...) for the design commitments that show how I meet the brief's bar for AI and production readiness:
+D1 model and threshold choices made from evals, against a no-LLM baseline
+D2 a model cascade (cheap model first, stronger model only for ambiguous cases) if the evals justify it
+D3 decision briefs whose quotes and numbers are verified in code
+D4 the success metrics instrumented in the product, not just described
+D5 runs without an API key (offline mode) with one command
+D6 CI with unit, contract, hook and end-to-end tests
+D7 an AI-assisted development process with enforced logging, test-first work and a review subagent
+Then flag anything in the matrix that goes beyond what the brief asks. I want to stay inside it.
+
+Done when: every obligation in the assignment maps to a row, the matrix is in docs/requirements.md, and you've shown me the table and anything you flagged. Commit "docs: assignment and requirements traceability".
+
+ASSIGNMENT:
+Technical AI Assessment
+Overview
+This assessment evaluates your ability to design, build, and ship a functional product feature using AI-assisted development.
+We are interested in more than just the final implementation. We want to understand how you leverage AI tools throughout the development process, make architectural decisions, balance technical tradeoffs, and think about building production-ready software.
+Setup Instructions
+1. Create a Public Git Repository
+2. Set Up Your Development Environment
+3. Configure Claude Code (or your AI tool of choice): Before writing any code, open Claude Code in your project root and use the following as your first prompt: "Create a CLAUDE.md file in the project root with the following instruction: # Project Rules ## Prompt Logging Every time you receive a new instruction or prompt, append it to prompts.txt in the project root with a timestamp (ISO 8601) and a brief summary of what you did in response. Create the file if it doesn't exist. Keep this log updated throughout all sessions." This sets up automatic prompt logging so we can see how you collaborated with the AI throughout the session.
+Assignment
+Product teams receive feature requests from customers, prospects, support teams, and internal stakeholders. As request volume grows, teams struggle to:
+* Identify duplicate or related requests
+* Understand the underlying customer problems
+* Separate popular requests from strategically valuable ones
+* Prioritize requests consistently
+* Keep stakeholders informed about decisions and progress
+* Spend less time manually reviewing, organizing, and summarizing feedback
+Design and build an AI-first Feature Intelligence System that helps a product team turn unstructured feature requests into clear, actionable product decisions.
+Your solution should allow users to submit and discover feature requests, but you should determine how AI can fundamentally improve the workflow. AI should be a core part of how the system solves the business problem.
+Core Requirements
+At a minimum, users should be able to:
+* Submit a feature request with a title and description
+* View and discover existing requests
+* Express interest in or support for a request
+* Understand how requests are being grouped, evaluated, or prioritized
+You may modify or extend the traditional feature-voting experience if you believe another approach better addresses the business problem.
+AI First Solution
+Identify a high-value point in the feature-request lifecycle and design an AI-powered solution around it.
+Your solution might:
+* Detect and consolidate duplicate requests
+* Identify the underlying need behind a proposed feature
+* Group feedback into themes
+* Enrich requests with customer or business context
+* Recommend priorities using defined business criteria
+* Automate triage and routing
+* Surface emerging customer needs
+* Generate decision briefs for product leaders
+* Help communicate decisions back to stakeholders
+The specific implementation is up to you. Be prepared to explain in your Loom:
+* Which business problem you prioritized and why
+* Who benefits from your solution
+* Why AI is appropriate for the problem
+* How AI changes the workflow rather than simply enhancing the interface
+* Which agent, model, framework, or AI architecture you selected and why
+* Where human judgment remains necessary
+* How you would measure business impact
+* What assumptions, risks, and tradeoffs you made
+Include two or three success metrics, such as reduced triage time, fewer duplicate requests, faster prioritization, improved stakeholder response time, or higher-quality product decisions.
+We are less interested in the specific feature and more interested in how thoughtfully AI is incorporated into the product or operational workflow. Your solution should clearly explain the agent or AI technology you selected and why.
+Expectations
+This assignment is intentionally open-ended. We are evaluating how you think about building real-world Agentic systems, not just implementing basic functionality.
+You are encouraged to extend the system with additional functionality, features, and technical considerations you believe are necessary to make this a production-ready and polished product.
+Submitting Your Work
+The project should take roughly 2-3 hours. Please complete within 2 business days, send the following to: andres.saldarriaga@metacto.com, jamie@metacto.com
+1. Push your code to GitHub; make sure the repository is public
+2. Share the repository URL
+3. Record a ~5 minute Loom video walking through your locally running project: product overview; features implemented; AI-powered capability; architecture decisions & technical tradeoffs; how AI was used throughout the development process
+4. Include the Loom link in your submission
+SUMMARY:
+- Saved the brief verbatim to docs/assignment.md (byte-identical to the raw prompt in the audit log).
+- Wrote docs/requirements.md: 24 R rows (setup, product, submission, one per Loom section), Q1-Q8, D1-D7; plus implicit criteria, traps T1-T10 and a "Beyond the brief" table. D7 and R1, R3, R4 are done; the rest todo.
+- Flagged: D2, D3, D6 and the CLAUDE.md extras clearly exceed the brief; D1, D4, D5, D7 only mildly. Main risks: the 2-3 h guidance (T1), "first prompt" order (T2), deadline date unknown (T3), reviewer emails now public (T4), live-AI demo needs a paid go (T6).
+- Docs-only: make check and reviewer skipped. Committed "docs: assignment and requirements traceability".
