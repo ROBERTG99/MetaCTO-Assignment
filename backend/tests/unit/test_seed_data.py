@@ -124,3 +124,92 @@ def test_loader_is_repeatable(engine: Engine) -> None:
     assert load_seed(engine) == first
     with Session(engine) as s:
         assert s.exec(select(func.count()).select_from(Request)).one() == first["requests"]
+
+
+def test_loader_applies_the_recorded_snapshot(engine: Engine) -> None:
+    from app.models import AIRun, AISuggestion, LinkActor, LinkEvent, SuggestionKind
+    from seed.load import load_seed
+
+    snap = load("snapshot.json")
+    counts = load_seed(engine, snapshot=True)
+    with Session(engine) as s:
+        requests = s.exec(select(Request)).all()
+        assert all(r.status == RequestStatus.processed for r in requests)
+        assert all(
+            r.need_statement and r.persona and r.product_area for r in requests
+        )  # real extraction on every row
+        bands = Counter(d["decision"]["band"] for d in snap["requests"].values())
+        linked = sum(r.need_id is not None for r in requests)
+        assert linked == bands["auto"] + bands["new"]
+        runs = s.exec(select(AIRun)).all()
+        assert len(runs) == counts["ai_runs"] == sum(len(d["runs"]) for d in snap["requests"].values())
+        assert {r.model for r in runs} == {"claude-haiku-4-5-20251001"} and all(r.cost_usd > 0 for r in runs)
+        events = s.exec(select(LinkEvent)).all()
+        assert len(events) == linked and all(e.actor == LinkActor.auto for e in events)
+        auto = s.exec(select(AISuggestion).where(AISuggestion.kind == SuggestionKind.duplicate)).all()
+        assert len(auto) == bands["auto"] + bands["suggest"]
+        assert all(n.priority_score is not None for n in s.exec(select(Need)).all())
+
+
+def test_a_tampered_snapshot_is_rejected(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import seed.load as loader
+
+    snap = load("snapshot.json")
+    first = next(iter(snap["requests"]))
+    snap["requests"][first]["extraction"]["product_area"] = "not-an-area"
+    (tmp_path / "snapshot.json").write_text(json.dumps(snap))
+    monkeypatch.setattr(loader, "SNAPSHOT", tmp_path / "snapshot.json")
+    with pytest.raises(ValueError):
+        loader.load_seed(engine, snapshot=True)
+
+
+def test_the_committed_snapshot_matches_the_locked_config() -> None:
+    from app.ai.policy import load_routing
+
+    cfg = load_routing(SEED.parent.parent / "config" / "routing.yaml")
+    snap = load("snapshot.json")
+    assert snap["routing"] == {"auto": cfg.auto, "suggest": cfg.suggest, "s_min": cfg.s_min, "s_max": cfg.s_max,
+                               "weights": [cfg.w_label, cfg.w_sim, cfg.w_fields]}  # fmt: skip
+    assert snap["prompts"] == ["extract_need_v1", "adjudicate_v1"]
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    ["unknown_need_key", "bad_related_label", "auto_without_need", "stale_threshold"],
+)
+def test_an_inconsistent_snapshot_is_a_clear_error(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tamper: str
+) -> None:
+    import seed.load as loader
+
+    snap = load("snapshot.json")
+    auto_ref = next(r for r, d in snap["requests"].items() if d["decision"]["band"] == "auto")
+    with_related = next(r for r, d in snap["requests"].items() if d["decision"]["related"])
+    if tamper == "unknown_need_key":
+        snap["requests"][auto_ref]["decision"]["need_key"] = "no-such-need"
+    elif tamper == "bad_related_label":
+        snap["requests"][with_related]["decision"]["related"][0]["label"] = "same"
+    elif tamper == "auto_without_need":
+        snap["requests"][auto_ref]["decision"]["need_key"] = None
+    else:
+        snap["routing"]["auto"] = 0.9
+    (tmp_path / "snapshot.json").write_text(json.dumps(snap))
+    monkeypatch.setattr(loader, "SNAPSHOT", tmp_path / "snapshot.json")
+    with pytest.raises(ValueError):
+        loader.load_seed(engine, snapshot=True)
+
+
+def test_seeded_related_suggestions_carry_their_run_and_score(engine: Engine) -> None:
+    from app.models import AISuggestion, SuggestionKind
+    from seed.load import load_seed
+
+    load_seed(engine, snapshot=True)
+    with Session(engine) as s:
+        related = s.exec(select(AISuggestion).where(AISuggestion.kind == SuggestionKind.related)).all()
+        assert related and all(r.ai_run_id is not None and r.routing_score is not None for r in related)
+        assert all(
+            r.processed_at is not None and r.processed_at >= r.created_at
+            for r in s.exec(select(Request)).all()
+        )

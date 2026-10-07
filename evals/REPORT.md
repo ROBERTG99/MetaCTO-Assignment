@@ -282,7 +282,7 @@ Prompts and config are unchanged, as asked.
    - It is Haiku's dominant failure: 12 of its 13 test misses labelled the true need `related`, and in 11 of them the extracted persona differs from the need's. When the persona differs, Haiku says `related` 11 times out of 58; when it matches, once in 67.
    - Sonnet does it more often, but not always: it still says same_need 31 times out of 58 when the persona differs. It also has 11 `related` misses where the persona matches, so a second cause is at work there.
 3. **T065, "Write Brightboard data back to Snowflake", expected data_portability.** Haiku **auto-linked** it to snowflake at 0.93: the only auto-link false merge on test.
-   - *Hypothesis:* the signals are correlated. The extraction read it as data_engineer and data_sources (defensible for "push datasets into Snowflake"). Those fields match the Snowflake need, so field agreement added 0.2 to a label that was already wrong. Without the field matches, the score would be 0.73: a suggestion, not an auto-link.
+   - *Hypothesis:* the signals are correlated. The extraction read it as data_engineer and data_sources (defensible for "push datasets into Snowflake"). Those fields match the Snowflake need, so field agreement added 0.2 to a label that was already wrong. Without the field matches, the score would still be 0.73: below the old 0.90, but an auto-link at the locked 0.6953 (§4.3).
    - Field agreement is not independent of the label.
    - The label itself (data_portability for reverse ETL) is also debatable, like T050. All three Sonnet runs called it a new need.
 4. **T084, "Investors want a monthly snapshot" (CFO), expected share_kpis.** Haiku suggested excel_finance.
@@ -290,3 +290,66 @@ Prompts and config are unchanged, as asked.
 5. **T050, "BigQuery connector", expected a new need.** Haiku suggested snowflake (same_need); Sonnet said `related`.
    - *Hypothesis:* the label may be the problem. "A native connector to our warehouse" is arguably one need, and the ground truth makes it Snowflake-only.
    - Worth a human decision. If the need is "warehouse connectors", this is a labelling fix, not a model fix. It is one of the generated cases (`reviewed_by_human: false`).
+
+## 4. Decisions (2026-10-07)
+
+Robert's decisions after reading §3. No eval was run for this section: everything below uses what was already measured and cached (`llm_cache.jsonl` unchanged). The config is locked in `config/routing.yaml`, and each value cites this section.
+
+### 4.1 Strategy: Haiku 4.5 for both extraction and adjudication. The cascade stays unbuilt.
+- **The choice:** on dev, where the choice is made, Haiku and Sonnet overlap: 82.3% (71-90) against 74.2% (62-83). The rule picks the simpler and cheaper one: one model for both steps, at about half the cost per request ($0.0062 vs $0.0117).
+- **Confirmation:** test confirms it with room to spare, 91.3% (86-95) against 74.7% (67-81).
+- **A stronger model wasn't automatically better here.** Sonnet with `adjudicate_v1` doesn't clearly beat the no-LLM baseline on accuracy on either split (dev 74.2% vs 62.9%; test 74.7% vs 71.3%; the intervals overlap). It wins only on false merges, which it never makes, because it labels too many true duplicates `related`.
+- **The cascade lost on the band it would escalate:** there, Sonnet is the weaker judge (dev 18/25 vs Haiku 24/25), and the simulated cascade is below both Sonnet-low and Haiku alone. That was measured on the old 0.90 suggest band. At the locked 0.6953, the band a cascade would escalate is empty on dev and has only 4 cases on test, so there would be almost nothing to escalate.
+- **What would change it:**
+  - A v2 prompt run in which Sonnet or Sonnet-low beats Haiku on dev with non-overlapping intervals.
+  - The audit sample showing Haiku's false merges above target on real traffic while a Sonnet run stays at zero.
+  - A material change in price or latency.
+
+### 4.2 Auto-link threshold: T_auto = 0.6953241109848022 (stored unrounded)
+- **What it is:** the lowest routing score with dev precision ≥ 0.97 on ≥ 10 links, 97.1% (34/35). Test confirms: 97.3% (109/112, 92-99).
+- **Said honestly, the sweep is degenerate:** 0.6953 is Haiku's lowest same_need score on dev, so in practice Haiku auto-links every same_need label, and the routing score doesn't separate its errors.
+- **The trade accepted:** 3 unreviewed false merges on test against 1 at 0.90. At 0.90 only 32% of true duplicates would auto-link, and the rest would go to the PM, which defeats the point of the product.
+- **The uncertainty:** the point estimate, 2.7%, is inside the 3% target (M4), but the interval allows up to about 8%. So the 10% audit sample stays on and measures the rate on real traffic.
+- **What would change it:**
+  - The audit sample's false-merge rate above 3% once at least 50 audited links exist. Then raise T_auto, or send same_need labels to the inbox until v2.
+  - Recalibrating the routing score (4.3).
+  - A v2 prompt, whose threshold is chosen again on dev.
+
+### 4.3 The routing score stays as it is, placeholders included
+- **Why not recalibrate:** recalibrating s_min, s_max and the weights would change the score and force a new threshold. The data shows the score adds little over the label right now: everything that Haiku labels same_need on dev scores at or above 0.6953.
+- **Field agreement is not an independent check.** It comes from the same extraction (T065: data_engineer and data_sources match the Snowflake need). Without it, T065 would still score 0.73, an auto-link at this threshold.
+- **So the protection against a wrong label is the audit sample and undo, not the score.**
+- **What would change it:** a dev set large and hard enough that, with calibrated s_min/s_max, precision varies by score bucket. The score would then carry information worth a threshold.
+
+### 4.4 Prompts stay at v1. Proposed `adjudicate_v2`, not shipped
+- **The persona rule is the main failure.** When the extracted persona differs from the need's, Haiku says `related` 11 times out of 58; when it matches, once in 67. Rule 7 requires an eval run for a prompt change, and none is being bought now. No v2 file was added to `app/ai/prompts/`.
+- **Proposed change:**
+  - Compare problems, not personas: same_need when the underlying problem and outcome match, whoever is asking.
+  - Accept that a need can serve several roles: a need's title names one persona, but its beneficiaries can span roles (end users and IT admins both want SSO).
+  - Treat the requester's role and `<extracted_need>` as evidence, not the answer: the job described in the request decides.
+  - Keep the hard negative as the counterweight: the same solution for a different job is still `related` (finance pack vs migration export).
+- **Cases that should flip** (Haiku's 11 persona misses on test): H006, H010, T005, T008, T013, T029, T039, T053, T059, T065 and T084. T065 and T084 also carry the field-agreement and role effects of failures 3 and 4.
+- **Ship v2 only if, on the same frozen splits** (Haiku adjudication only, extraction cached; about 211 calls, about $0.80), all of these hold:
+  - on dev, accuracy at least v1's 82.3% and duplicate recall above v1's 77.3%, with duplicate precision still at least 0.97 at its re-chosen T_auto;
+  - on test, at least 6 of the 11 cases above flip to correct;
+  - the same-solution, different-need slice (the Excel split the persona rule protects) doesn't fall below 22/25;
+  - unreviewed false merges at T_auto don't exceed v1's 3.
+- **Unexplained:** Sonnet also has 11 `related` misses where the persona *matches*. The persona rule doesn't explain them, and no hypothesis is offered until a Sonnet run is worth paying for.
+
+### 4.5 Disputed labels: T050 and T065 keep their labels (the test set is frozen)
+
+| Case | Frozen label | Other reading | Haiku: accuracy / unreviewed false merges at T_auto | Sonnet accuracy |
+|---|---|---|---|---|
+| (as frozen) | | | 137/150 / 3 | 112/150 |
+| T050, "BigQuery connector" | a new need: the seeded need is Snowflake-specific | one "warehouse connector" need for data teams, i.e. snowflake | 138/150 / 2 (Haiku's snowflake link becomes right) | 111/150 (its "new" becomes wrong) |
+| T065, "Write Brightboard data back to Snowflake" | data_portability: data going out is export | snowflake: one "Snowflake integration" need, both directions | 138/150 / 2 (Haiku's auto-link becomes right) | 112/150 (it said new: wrong either way) |
+| both | | | 139/150 / 1 | 111/150 |
+
+- **What changes:** under both other readings, Haiku's unreviewed false merges at T_auto fall from 3 to 1, and only T084 remains. Sonnet barely moves.
+- **What would change the labels:** a human decision recorded as a new, separately frozen test set (v2, a new hash, results kept for v1). The frozen file is never edited.
+
+### 4.6 Limitations, in the README
+- **Spanish:** recall@1 is 1/4, because bge-small-en is English-only.
+- **Dev has no hard cases,** so a threshold chosen on dev isn't stress-tested.
+- The README says what would fix each one.
+

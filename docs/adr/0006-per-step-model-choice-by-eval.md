@@ -28,11 +28,12 @@ Extraction and adjudication may need different models. At about 1-2 cents per re
 - Model-specific rules (structured outputs, effort, stop reasons) live in the provider, not in the pipeline.
 - The eval set has to be large enough to separate configurations: about 150 labelled pairs, weighted toward the hard cases (test-plan.md).
 
-## Outcome (2026-10-07, evals/REPORT.md §3)
-- **Haiku 4.5 for both steps.** On dev it overlaps with Sonnet 5.5 (82.3% vs 74.2%), so the simpler, cheaper strategy wins. Test confirms: 91.3% (86-95) vs 74.7% (67-81).
-- **Sonnet 5.5 with `adjudicate_v1`** has perfect precision but about 70% recall. It does not clearly beat the no-LLM baseline on accuracy.
-- **C3 as defined was not measured.** C3 (Sonnet-low for both steps) ran with Haiku extraction, as Robert asked.
-- **The cascade was rejected.** Haiku's confident decisions are calibrated on dev, but on the band the cascade would escalate Sonnet is the weaker judge, and the cascade loses to Sonnet-low.
-- **Not applied yet.** Config and prompts are unchanged until Robert's go.
-- **Not final.** The comparison holds for prompt v1; a v2 needs a new run.
+## Outcome (2026-10-07, evals/REPORT.md §3 and §4)
+
+**Locked: Haiku 4.5 for extraction and adjudication** (`config/routing.yaml` → `llm.strategy: haiku`).
+- **Why Haiku:** on dev, where the choice is made, it overlaps Sonnet 5.5 (82.3% vs 74.2%), so the simpler, cheaper strategy wins at about half the cost per request. Test confirms it: 91.3% (86-95) vs 74.7% (67-81).
+- **Why Sonnet 5.5 lost:** with `adjudicate_v1` it applies the persona rule too strictly. It has perfect precision but about 70% recall, and it doesn't clearly beat the no-LLM baseline on accuracy on either split (the intervals overlap). A stronger model wasn't automatically better.
+- **Why the cascade lost:** Haiku's confident decisions are calibrated on dev (10/10), but on the band a cascade would escalate Sonnet is the weaker judge (dev 18/25 vs Haiku's 24/25). The simulated cascade (72.6%) is below Sonnet-low (74.2%) and Haiku alone (82.3%). Not built.
+- **What was measured:** C3 as defined (Sonnet-low for both steps) was not measured; every strategy used Haiku extraction.
+- **Prompts stay at v1.** A v2 that compares problems rather than personas is proposed in REPORT §4.4, with ship criteria and a budget of about $0.80.
 

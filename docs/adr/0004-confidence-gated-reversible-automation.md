@@ -23,5 +23,13 @@ Auto-linking is what removes PM work (metric M1). A false merge, though, silentl
 
 ## Consequences
 - The PM's work is the gray zone, disputes, failures and the 10% audit. The audit is reported separately from M1, as the cost of measuring.
-- Starting with a high T_auto means fewer auto-links at first. That is deliberate: automation grows as the audit earns trust.
+- Starting with a high T_auto means fewer auto-links at first. That is deliberate: automation grows as the audit earns trust. *Superseded by the Outcome below: the evals set T_auto at 0.6953, so automation starts broad and the audit sample is what limits the risk.*
 - At about 10% sampling, a tight bound on false merges needs a few hundred auto-links. With synthetic data, the bound stays wide, and the report says so.
+
+## Outcome (2026-10-07, evals/REPORT.md §3 and §4.2)
+- **T_auto = 0.6953241109848022, stored unrounded.** It is the lowest routing score with dev precision ≥ 0.97 on ≥ 10 links: 97.1%, 34/35. Test confirms 97.3%, 109/112 (92-99).
+- **The sweep is degenerate:** in practice every same_need label auto-links. T_suggest stays at 0.60.
+- **Accepted:** 3 unreviewed false merges on test against 1 at 0.90, because 0.90 would auto-link only 32% of true duplicates.
+- **Measured, not assumed:** the point estimate (2.7%) is inside the 3% target, but the interval allows about 8%. The 10% audit sample stays on as the measurement of M4 on real traffic.
+- **The trigger to revisit:** an audited false-merge rate above 3% on at least 50 audited links.
+

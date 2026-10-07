@@ -57,3 +57,24 @@ def test_no_valid_auto_threshold_means_never_auto_link() -> None:
 
     th = choose_thresholds([top(None, "A", 0.95), top("A", "A", 0.6)], min_links=10)
     assert th.auto > 1.0 and th.suggest == 0.6
+
+
+def test_tuning_rewrites_only_the_baseline_block_and_keeps_comments() -> None:
+    from evals.run import replace_block
+
+    text = "# routing config\nbaseline:\n  auto: 0.7\n  suggest: 0.6\n\n# LLM strategy (REPORT §3)\nllm:\n  thresholds:\n    auto: 0.6953  # comment kept\n"
+    out = replace_block(text, "baseline", {"auto": 0.8, "suggest": 0.65})
+    assert out.startswith("# routing config\nbaseline:\n  auto: 0.8\n  suggest: 0.65\n")
+    assert out.endswith(
+        "\n# LLM strategy (REPORT §3)\nllm:\n  thresholds:\n    auto: 0.6953  # comment kept\n"
+    )
+
+
+def test_a_comment_inside_the_block_does_not_end_it() -> None:
+    import yaml
+
+    from evals.run import replace_block
+
+    text = "baseline:\n  auto: 0.7\n# note\n  suggest: 0.6\nllm:\n  top_k: 5\n"
+    out = yaml.safe_load(replace_block(text, "baseline", {"auto": 0.8, "suggest": 0.65}))
+    assert out == {"baseline": {"auto": 0.8, "suggest": 0.65}, "llm": {"top_k": 5}}

@@ -1,4 +1,4 @@
-.PHONY: setup dev-api test lint typecheck check check-hooks seed seed-live openapi eval-offline eval-tune eval eval-compare
+.PHONY: setup dev-api test lint typecheck check check-hooks seed seed-raw seed-live openapi eval-offline eval-tune eval eval-compare snapshot
 
 BACKEND := cd backend &&
 
@@ -26,9 +26,13 @@ check: lint typecheck test check-hooks
 check-hooks:
 	PATH="$(CURDIR)/backend/.venv/bin:$$PATH" HOOK_TESTS_REQUIRE_RUFF=1 python3 -m unittest discover -s .claude/hooks -v
 
-# Reset the local database and load the raw Brightboard seed (no needs, all requests pending)
+# Reset the local database and load the Brightboard seed with recorded Haiku 4.5 output (seed/snapshot.json)
 seed:
 	$(BACKEND) uv run python -m seed.load
+
+# Raw seed only: pending requests, no AI output
+seed-raw:
+	$(BACKEND) uv run python -m seed.load --raw
 
 # Paid: reset to the seed with a curated backlog and run REFS through the live pipeline (settings ask first)
 REFS ?= R22,R13,R07
@@ -59,3 +63,7 @@ eval:
 # Free: rebuild the strategy comparison (evals/results/comparison.md) from cached outcomes
 eval-compare:
 	cd backend && PYTHONPATH=.. HF_HUB_OFFLINE=1 uv run python -m evals.compare
+
+# Free: rebuild backend/seed/snapshot.json from the cached Haiku dev replay (fails, writing nothing, on a cache miss)
+snapshot:
+	cd backend && PYTHONPATH=.. HF_HUB_OFFLINE=1 uv run python -m evals.snapshot

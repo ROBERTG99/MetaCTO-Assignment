@@ -117,7 +117,7 @@ Model calls happen first. All results are then written in one transaction, so a 
 
 **Offline mode** (`AI_MODE=offline`, the default):
 - Steps 4 and 5 use heuristics and the embedding baseline, and the UI labels their source as "offline baseline".
-- The seed data also carries AI outputs recorded during `make seed-live`, labelled with their model and prompt version. The seed loader validates them through the same Pydantic schemas before persisting them. Reviewers therefore see real model output without an API key.
+- `make seed` loads recorded Haiku 4.5 output (`backend/seed/snapshot.json`), built by `make snapshot` from the cached eval dev replay with no API calls. It is validated with the same Pydantic schemas, and refused if it no longer matches the locked config. The replay was teacher-forced (evals/snapshot.py), so the seed is real model output, not a simulated history. Reviewers therefore see real model output without an API key.
 
 ## 7. Human-in-the-loop policy
 
@@ -141,10 +141,10 @@ Model calls happen first. All results are then written in one transaction, so a 
 - *s_n*: the best cosine similarity between the request and any of the need's vectors.
 - *f_n*: field agreement, the mean of (product_area matches, persona matches), so 0, 0.5 or 1.
 - `score_n = 0` if *L_n* ≠ same_need. Otherwise `score_n = w_L + w_s · clip((s_n − s_min)/(s_max − s_min), 0, 1) + w_f · f_n`.
-- Starting values: w_L 0.5, w_s 0.3, w_f 0.2. s_min and s_max are calibrated on the dev split.
+- Values: w_L 0.5, w_s 0.3, w_f 0.2, s_min 0.55, s_max 0.85. These are **placeholders, not calibrated**, kept on purpose (REPORT §4.3): recalibrating them would change the score and force a new T_auto.
 
 **Policy**, on the best candidate *n\**:
-- `score ≥ T_auto` (start high: 0.90): auto-link (need_id set, suggestion `applied`).
+- `score ≥ T_auto` (locked at 0.6953 from the evals, REPORT §4.2; it started at 0.90): auto-link (need_id set, suggestion `applied`).
 - `T_suggest ≤ score < T_auto` (start: 0.60): suggested.
 - Otherwise new_need. Candidates labelled same_need or related are still shown on the request as "possibly related" (`related` suggestions). That is a suggestion only: it isn't in the inbox and doesn't count as demand.
 
@@ -210,7 +210,7 @@ Further guardrails shown in F8:
 
 | Risk | Mitigation |
 |---|---|
-| False merges hide demand and mislead updates | High T_auto, claims not counted until confirmed, a 10% audit (M4), one-click undo with LinkEvent history |
+| False merges hide demand and mislead updates | The 10% audit sample (M4, measured on real traffic), one-click undo with LinkEvent history, and claims not counted until confirmed. Not the threshold: at the locked T_auto (0.6953) every same_need label auto-links, and the routing score doesn't separate errors (REPORT §4.2-4.3). |
 | Synthetic data overstates quality | Hard cases written by hand first, a frozen test split, error bars, and the report says the data is synthetic |
 | Prompt injection in request text | Text inside XML tags as data, structured output only, no write tools in intake (rule 3); the worst case is a wrong suggestion a human reviews or undoes |
 | PII sent to the provider | Emails and phones redacted at save and again in the gateway on every call. Names aren't redacted (accepted risk, noted). |

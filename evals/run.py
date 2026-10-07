@@ -10,6 +10,7 @@ test = the frozen 150 cases, each routed against the full seeded backlog (17 nee
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import time
@@ -42,6 +43,7 @@ ROUTING = ROOT / "config" / "routing.yaml"
 RESULTS = ROOT / "evals" / "results"
 CACHE = ROOT / "backend" / ".cache" / "fastembed"
 BUCKETS = [0.0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+TOP_KEY = re.compile(r"^[A-Za-z_][\w-]*:")
 K = 5
 Tagged = list[tuple[str, Decision]]
 
@@ -192,6 +194,30 @@ def git_sha() -> str:
     return sha.stdout.strip() + ("-dirty" if dirty.stdout.strip() else "")
 
 
+def replace_block(text: str, key: str, values: dict[str, Any]) -> str:
+    """Replace one top-level YAML block, keeping every other line (and its comments) as written.
+
+    The block ends at the next top-level key, so a comment inside it doesn't end it early. The result is
+    re-parsed and checked: the block holds exactly `values` and every other key is unchanged.
+    """
+    block = yaml.safe_dump({key: values}, sort_keys=False, allow_unicode=True)
+    lines = text.splitlines(keepends=True)
+    start = next((i for i, line in enumerate(lines) if line.startswith(f"{key}:")), None)
+    if start is None:
+        out = (text.rstrip("\n") + "\n\n" if text.strip() else "") + block
+    else:
+        end = next((i for i in range(start + 1, len(lines)) if TOP_KEY.match(lines[i])), len(lines))
+        while end > start + 1 and (lines[end - 1].strip() == "" or lines[end - 1].startswith("#")):
+            end -= 1  # blank lines and comments just above the next block belong to it
+        out = "".join(lines[:start]) + block + "".join(lines[end:])
+    before, after = yaml.safe_load(text) or {}, yaml.safe_load(out) or {}
+    if after.get(key) != values or {k: v for k, v in after.items() if k != key} != {
+        k: v for k, v in before.items() if k != key
+    }:
+        raise ValueError(f"replacing {key} in the YAML would change other content; edit it by hand")
+    return out
+
+
 def tune(embedder: Embedder) -> Thresholds:
     raw = [d for _, d in replay_dev(embedder, th=None)]
     th = choose_thresholds(raw)
@@ -210,9 +236,8 @@ def tune(embedder: Embedder) -> Thresholds:
         "git": git_sha(),
     }
     ROUTING.parent.mkdir(exist_ok=True)
-    data = yaml.safe_load(ROUTING.read_text()) if ROUTING.exists() else {}
-    data["baseline"] = meta  # keep the other sections (llm)
-    ROUTING.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
+    text = ROUTING.read_text(encoding="utf-8") if ROUTING.exists() else ""
+    ROUTING.write_text(replace_block(text, "baseline", meta), encoding="utf-8")
     return th
 
 

@@ -1,3 +1,4 @@
+# Routing configuration. The baseline block is written by `make eval-tune` (dev only); the llm block is by hand.
 baseline:
   auto: 0.7665919065475464
   suggest: 0.6508365869522095
@@ -8,28 +9,30 @@ baseline:
     suggest: highest that keeps 95% of the remaining true duplicates. Stored unrounded.'
   tuned_at: '2026-10-07T15:38:37Z'
   git: 3ce8b0d-dirty
+
+# LLM strategy. Locked 2026-10-07 from evals/REPORT.md §3 (comparison) and §4 (decisions).
+# Changing a model, a prompt, a weight or a threshold needs a new eval run recorded in the report (CLAUDE.md rule 7).
 llm:
-  note: Routing for the LLM strategy (ADR 0003, spec §8). Weights and thresholds are
-    starting values; s_min/s_max are placeholders until the first paid eval calibrates
-    them on dev.
-  weights:
+  strategy: haiku  # a label only, no code reads it: the lock is `models` below. REPORT §3: on dev Haiku overlaps Sonnet 5.5, so the simpler and cheaper wins
+  models:
+    extract: fast     # FAST_MODEL = claude-haiku-4-5 (REPORT §3). A FAST_MODEL in .env would override it: keep it claude-haiku-4-5
+    adjudicate: fast  # FAST_MODEL = claude-haiku-4-5; Sonnet 5.5 lost on recall, the cascade was not built (REPORT §3)
+  effort:
+    adjudicate: null  # Haiku 4.5 takes no effort parameter
+  weights:  # PLACEHOLDERS, not calibrated: they shape the routing score, and recalibrating them forces a new T_auto (REPORT §4.3)
     label: 0.5
     similarity: 0.3
     fields: 0.2
-  similarity:
+  similarity:  # PLACEHOLDERS, not calibrated (REPORT §4.3)
     s_min: 0.55
     s_max: 0.85
   thresholds:
-    auto: 0.9
-    suggest: 0.6
+    # Lowest routing score with dev precision >= 0.97 on >= 10 links, stored unrounded. Test confirms 97.3% (109/112).
+    # Degenerate: it equals Haiku's lowest same_need score on dev, so in practice every same_need label auto-links.
+    # Interval allows up to ~8% false merges; the audit sample measures it on real traffic (REPORT §3, §4.2).
+    auto: 0.6953241109848022
+    suggest: 0.6  # unchanged starting value (spec §8)
   audit:
-    rate: 0.1
+    rate: 0.1  # 10% of auto-links go to the PM's Audit tab; it is the measurement of M4 at this threshold (REPORT §4.2)
     seed: distill-audit-v1
   top_k: 5
-  models:
-    extract: fast
-    adjudicate: smart
-  effort:
-    adjudicate: null
-  effort_note: null = the model's default (high on Sonnet 5.5). Haiku 4.5 takes no
-    effort. Set from the first eval.
