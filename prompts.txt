@@ -70,3 +70,29 @@ Response:
 - Reviewed CLAUDE.md as a new engineer and reported ambiguities/contradictions in chat without editing it.
 - Entry format chosen (not defined anywhere yet): "==== #N · <ISO 8601 UTC> ====", verbatim prompt, then a response summary. Earlier entries left unchanged.
 - Initial commit with CLAUDE.md and prompts.txt (docs-only prompt: make check and reviewer skipped per the rule). Push pending the user's go.
+
+---
+[#4] 2026-10-07T14:06:21Z
+PROMPT:
+CLAUDE.md is guidance, and models drift. For the things that must always happen I want guarantees, so I copied my reusable Claude Code harness into .claude/. It isn't specific to this project; .claude/README.md explains each piece:
+- hooks/: log_prompt.py (UserPromptSubmit, raw audit trail in prompts.audit.jsonl), guard_prompt_log.py (PreToolUse, keeps prompts.txt and prompts.audit.jsonl append-only), format_python.py (PostToolUse, runs the project's ruff on edited Python files), require_prompt_log.py (Stop, sends you back once if a turn ends without its prompts.txt entry), and test_hooks.py.
+- rules/: path-scoped rules for model-calling code, tests and frontend code, so that context only loads when it's relevant.
+- agents/reviewer.md: a reviewer with no edit tools that I'll use before each feature is done.
+- skills/: tdd, quality-gate and eval-report (eval-report only runs when I invoke it, because evals cost money).
+- settings.json: the hooks, generic allow rules, ask before git push, deny rules for .env, the audit file and force pushes, and env settings that keep every command in the project root and subagents in the foreground.
+
+1. Review every file against CLAUDE.md as a skeptical senior engineer. If something is clearly wrong, tell me what and why before changing it; edits to .claude/ will ask me anyway. If you'd design something differently, say so, but don't change it.
+2. Run the hook tests: `python3 -m unittest discover -s .claude/hooks -v`.
+3. Add this project's permissions to .claude/settings.json: allow `Bash(make *)`, `Bash(uv run *)`, `Bash(uv sync *)`, `Bash(npm run *)` and `Bash(npx playwright test *)`; ask before `Bash(make eval *)` and `Bash(make seed-live *)`, because those call the paid API. Ask rules apply in every permission mode.
+4. Create .gitignore (Python, Node, .env, *.db, data/, .venv, node_modules, __pycache__, playwright-report), .env.example (ANTHROPIC_API_KEY=, FAST_MODEL=claude-haiku-4-5, SMART_MODEL=claude-sonnet-5-5, AI_MODE=offline, DATABASE_URL=sqlite:///./data/distill.db), a Makefile with a `check-hooks` target that runs the hook tests, and a one-line README placeholder.
+5. Commit "chore: AI-assisted development harness" and push.
+
+Done when: the 28 hook tests pass (show the summary line), prompts.audit.jsonl contains this prompt, settings.json has the project rules, and git status is clean.
+SUMMARY:
+- Reviewed all 14 files in .claude/ against CLAUDE.md and the Claude Code docs (permissions, permission-modes, hooks); findings reported in chat, no harness file changed except settings.json.
+- Hook tests: Ran 28, OK (skipped=3) -> 25 pass, 3 formatter tests skipped because ruff is not on PATH. Not "28 pass".
+- prompts.audit.jsonl NOT written: this session was started in the parent folder (MetaCTO/), so Claude Code never loaded the repo's .claude/settings.json and no hook runs here (CLAUDE_PROJECT_DIR is empty). Needs a new session opened in the repo root. Did not backfill the audit by hand.
+- settings.json: added allow make/uv run/uv sync/npm run/npx playwright test and ask make eval/make seed-live (docs confirm `make eval *` also matches bare `make eval`, ask beats allow, and ask rules prompt even in bypassPermissions).
+- Created .gitignore (also .env.* except .env.example, SQLite -wal/-shm, Drive sync files, .claude/settings.local.json), .env.example, Makefile (check-hooks), README.md placeholder.
+- Entry format switched to the one the hook tests use (---, [#N] ts, PROMPT:, SUMMARY:); entry #3 used an improvised format and stays as is (append-only).
+- Committed "chore: AI-assisted development harness" and pushed main (also pushes the earlier docs commit).

@@ -1,0 +1,40 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+frontend/dist/
+playwright-report/
+test-results/
+
+# Data
+*.db
+*.db-shm
+*.db-wal
+data/
+
+# OS / editors / Google Drive sync
+.DS_Store
+Icon?
+.tmp.drivedownload*
+*.gdoc
+.idea/
+.vscode/
+
+# Claude Code personal overrides
+.claude/settings.local.json
