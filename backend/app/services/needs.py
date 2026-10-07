@@ -39,6 +39,7 @@ from app.schemas import (
     SupportOut,
 )
 from app.scoring import PrioritiesConfig, rank_key
+from app.services import need_detail as detail
 from app.services import priority
 from app.services.requests import get_requester
 
@@ -183,8 +184,13 @@ def get_need(session: Session, need_id: int, cfg: PrioritiesConfig) -> NeedDetai
     supports = session.exec(
         select(Support).where(Support.need_id == need_id).order_by(col(Support.created_at))
     ).all()
+    member_ids = [r.id for r in requests if r.id is not None]
     return NeedDetail(
         **_summary(need, stats, b).model_dump(),
+        origin=detail.origin(session, need),
+        evidence=detail.evidence(session, need, member_ids),
+        updates=detail.updates(session, need_id),
+        audit_trail=detail.audit_trail(session, need, member_ids),
         job_to_be_done=need.job_to_be_done,
         merged_into_id=need.merged_into_id,
         requests=[
@@ -197,6 +203,8 @@ def get_need(session: Session, need_id: int, cfg: PrioritiesConfig) -> NeedDetai
                 requester_name=people[r.requester_id].name,
                 account_name=account_name(r.account_id),
                 created_at=r.created_at,
+                analysis=detail.analysis(session, r),
+                link=detail.link(session, r, need_id),
             )
             for r in requests
             if r.id is not None

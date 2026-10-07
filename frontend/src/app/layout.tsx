@@ -14,6 +14,7 @@ const NAV = {
     { to: '/triage', label: 'Triage inbox' },
     { to: '/priorities', label: 'Priorities' },
     { to: '/needs', label: 'Browse needs' },
+    { to: '/ops', label: 'AI Ops' },
   ],
 } as const
 

@@ -70,6 +70,20 @@ def routing_score(
     return cfg.w_label + cfg.w_sim * sim + cfg.w_fields * fields
 
 
+def similarity_from_score(
+    label: str | None, score: float | None, area_match: bool, persona_match: bool, cfg: RoutingConfig
+) -> float | None:
+    """Invert routing_score for a same_need label: the similarity, unless the similarity term was clipped
+    (at or beyond s_min or s_max the exact value is lost). Used for suggestions recorded before the parts were
+    stored (the seed snapshot)."""
+    if label != "same_need" or score is None or cfg.w_sim <= 0:
+        return None
+    term = (score - cfg.w_label - cfg.w_fields * (int(area_match) + int(persona_match)) / 2) / cfg.w_sim
+    if not 1e-9 < term < 1 - 1e-9:
+        return None
+    return cfg.s_min + term * (cfg.s_max - cfg.s_min)
+
+
 def decide(scored: list[Scored], cfg: RoutingConfig) -> Route:
     """The best same_need candidate by routing score, then the bands. Ties go to the lower need id."""
     best = max(

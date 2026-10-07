@@ -14,6 +14,8 @@ from app.ai.index import request_text
 from app.ai.pipeline import Deps, live_need, new_need_for
 from app.errors import AppError, not_found
 from app.models import (
+    Account,
+    AIRun,
     AISuggestion,
     LinkAction,
     LinkActor,
@@ -21,6 +23,7 @@ from app.models import (
     Need,
     NeedStatus,
     Request,
+    Requester,
     RequestStatus,
     SuggestionKind,
     SuggestionState,
@@ -62,49 +65,122 @@ def _need(n: Need | None) -> dict[str, Any] | None:
     }
 
 
-def list_triage(session: Session) -> dict[str, Any]:
-    items = []
-    for s in session.exec(
-        select(AISuggestion).order_by(col(AISuggestion.created_at), col(AISuggestion.id))
+def source_of(session: Session, run_id: int | None) -> dict[str, Any] | None:
+    run = session.get(AIRun, run_id) if run_id is not None else None
+    if run is None:
+        return None
+    return {"model": run.model, "prompt_version": run.prompt_version, "ai_run_id": run.id}
+
+
+def routing_parts(s: AISuggestion, deps: Deps) -> dict[str, Any] | None:
+    """The parts of a stored routing score, on the score's scale, with the thresholds that applied to it."""
+    if s.routing_score is None and s.similarity is None:
+        return None
+    mode = s.routing_mode or ("baseline" if s.label == "similar" else "llm")
+    if mode == "baseline":  # the offline baseline: the score is the similarity
+        b = deps.baseline
+        sim = s.similarity if s.similarity is not None else s.routing_score
+        return {"mode": "baseline", "score": s.routing_score, "label": None, "similarity": sim,
+                "area_match": None, "persona_match": None, "label_points": 0.0, "similarity_points": sim or 0.0,
+                "field_points": 0.0, "auto_threshold": b.auto if b else None,
+                "suggest_threshold": b.suggest if b else None}  # fmt: skip
+    cfg = deps.routing
+    same = s.label == "same_need"
+    fields = (int(bool(s.area_match)) + int(bool(s.persona_match))) / 2
+    label_points = cfg.w_label if same else 0.0
+    field_points = cfg.w_fields * fields if same else 0.0
+    if not same:
+        sim_points = 0.0
+    elif s.similarity is not None:
+        span = cfg.s_max - cfg.s_min
+        sim_points = cfg.w_sim * (
+            min(1.0, max(0.0, (s.similarity - cfg.s_min) / span))
+            if span > 0
+            else float(s.similarity >= cfg.s_max)
+        )
+    else:  # not recoverable (clipped): what's left of the score
+        sim_points = max(0.0, (s.routing_score or 0.0) - label_points - field_points)
+    return {"mode": "llm", "score": s.routing_score, "label": s.label, "similarity": s.similarity,
+            "area_match": s.area_match, "persona_match": s.persona_match, "label_points": label_points,
+            "similarity_points": sim_points, "field_points": field_points, "auto_threshold": cfg.auto,
+            "suggest_threshold": cfg.suggest}  # fmt: skip
+
+
+def _request(session: Session, r: Request) -> dict[str, Any]:
+    who = session.get(Requester, r.requester_id)
+    account = session.get(Account, r.account_id) if r.account_id else None
+    return {"id": r.id, "title": r.title, "description": r.description, "need_statement": r.need_statement,
+            "persona": r.persona, "problem": r.problem, "product_area": r.product_area,
+            "requester_name": who.name if who else None, "account_name": account.name if account else None,
+            "created_at": r.created_at}  # fmt: skip
+
+
+def _item(session: Session, s: AISuggestion, kind: str, deps: Deps) -> dict[str, Any]:
+    item: dict[str, Any] = {
+        "id": s.id,
+        "kind": kind,
+        "routing_score": s.routing_score,
+        "label": s.label,
+        "model_confidence": s.model_confidence,
+        "rationale": s.rationale,
+        "quotes": s.quotes,
+        "created_at": s.created_at,
+        "need": None,
+        "alternative_need": None,
+        "request": None,
+        "support": None,
+        "source": source_of(session, s.ai_run_id),
+        "routing": routing_parts(s, deps),
+    }
+    if s.request_id is not None:
+        item["need"] = _need(session.get(Need, s.need_id) if s.need_id else None)
+        r = session.get(Request, s.request_id)
+        if r is not None:
+            item["request"] = _request(session, r)
+    if s.support_id is not None:
+        sup = session.get(Support, s.support_id)
+        if sup is not None:
+            # accept confirms the claimed need; the model's alternative (if any) is shown separately
+            item["need"] = _need(session.get(Need, sup.need_id))
+            if s.need_id != sup.need_id:
+                item["alternative_need"] = _need(session.get(Need, s.need_id) if s.need_id else None)
+            item["support"] = {"id": sup.id, "why_it_matters": sup.why_it_matters, "severity": sup.severity,
+                               "claimed_need": _need(session.get(Need, sup.need_id)), "reason": sup.review_reason}  # fmt: skip
+    return item
+
+
+AUTO_LINKED_SHOWN = 50  # newest first; the tab says how many more there are
+
+
+def list_triage(session: Session, deps: Deps) -> dict[str, Any]:
+    items: list[dict[str, Any]] = []
+    auto: list[AISuggestion] = []
+    for s in session.exec(  # only states that can be waiting for a PM or still in place
+        select(AISuggestion)
+        .where(col(AISuggestion.state).in_([SuggestionState.proposed, SuggestionState.applied]))
+        .order_by(col(AISuggestion.created_at), col(AISuggestion.id))
     ).all():
         kind = _kind(s)
-        if kind is None:
-            continue
-        item: dict[str, Any] = {
-            "id": s.id,
-            "kind": kind,
-            "routing_score": s.routing_score,
-            "label": s.label,
-            "model_confidence": s.model_confidence,
-            "rationale": s.rationale,
-            "quotes": s.quotes,
-            "created_at": s.created_at,
-            "need": None,
-            "alternative_need": None,
-            "request": None,
-            "support": None,
-        }
-        if s.request_id is not None:
-            item["need"] = _need(session.get(Need, s.need_id) if s.need_id else None)
+        if kind is not None:
+            items.append(_item(session, s, kind, deps))
+        if (
+            s.state == SuggestionState.applied
+            and s.kind == SuggestionKind.duplicate
+            and s.request_id is not None
+            and s.support_id is None
+        ):
             r = session.get(Request, s.request_id)
-            if r is not None:
-                item["request"] = {"id": r.id, "title": r.title, "description": r.description,
-                                   "need_statement": r.need_statement, "persona": r.persona}  # fmt: skip
-        if s.support_id is not None:
-            sup = session.get(Support, s.support_id)
-            if sup is not None:
-                # accept confirms the claimed need; the model's alternative (if any) is shown separately
-                item["need"] = _need(session.get(Need, sup.need_id))
-                if s.need_id != sup.need_id:
-                    item["alternative_need"] = _need(session.get(Need, s.need_id) if s.need_id else None)
-                item["support"] = {"id": sup.id, "why_it_matters": sup.why_it_matters, "severity": sup.severity,
-                                   "claimed_need": _need(session.get(Need, sup.need_id)), "reason": sup.review_reason}  # fmt: skip
-        items.append(item)
+            if r is not None and r.need_id == s.need_id:  # still where the auto-link put it
+                auto.append(s)
+    auto.reverse()  # newest first
+    auto_linked = [_item(session, s, "auto_link", deps) for s in auto[:AUTO_LINKED_SHOWN]]
     failed = session.exec(
         select(Request).where(Request.status == RequestStatus.needs_review).order_by(col(Request.id))
     ).all()
     return {
         "items": items,
+        "auto_linked": auto_linked,
+        "auto_linked_total": len(auto),
         "needs_review": [
             {"id": r.id, "title": r.title, "reason": r.needs_review_reason, "attempts": r.attempts}
             for r in failed

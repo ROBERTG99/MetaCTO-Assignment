@@ -13,6 +13,7 @@ from app.schemas import (
     NeedDetail,
     NeedPage,
     NeedSort,
+    NeedStatusUpdate,
     SimilarNeed,
     SupportCreate,
     SupportOut,
@@ -98,3 +99,22 @@ def add_support(
     support, created = service.add_support(session, need_id, body)
     response.status_code = 201 if created else 200
     return support
+
+
+@router.patch(
+    "/needs/{need_id}",
+    response_model=NeedDetail,
+    responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 422: {"model": ErrorResponse}},
+    summary="Set a need's status (a human product decision)",
+    description="Appends to the status history, shown in the audit trail. 409 for a merged need.",
+)
+def set_status(
+    body: NeedStatusUpdate,
+    need_id: int = NeedId,
+    session: Session = Depends(get_session),
+    deps: Deps = Depends(get_deps),
+) -> NeedDetail:
+    from app.services import need_detail
+
+    need_detail.set_status(session, need_id, body.status, body.by)
+    return service.get_need(session, need_id, deps.priorities)

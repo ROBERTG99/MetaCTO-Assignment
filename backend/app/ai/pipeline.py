@@ -268,6 +268,9 @@ def process_request(session: Session, request_id: int, deps: Deps) -> str:
     )
     confidence, rationale, quotes = _judgment(adj, first_choice, text)
     label = "same_need" if deps.mode == "llm" and route.need_id else ("similar" if route.need_id else None)
+    chosen = next((s for s in scored if s.need_id == first_choice), None)
+    if deps.mode == "baseline" and route.need_id is not None and deps.baseline is not None:
+        rationale = baseline_reason(route.score, deps.baseline)
     if route.band in ("auto", "suggest"):
         assert route.need_id is not None
         auto = route.band == "auto"
@@ -277,6 +280,10 @@ def process_request(session: Session, request_id: int, deps: Deps) -> str:
             kind=SuggestionKind.duplicate,
             label=label,
             routing_score=route.score,
+            routing_mode=deps.mode,
+            similarity=chosen.similarity if chosen else (route.score if deps.mode == "baseline" else None),
+            area_match=chosen.area_match if chosen else None,
+            persona_match=chosen.persona_match if chosen else None,
             model_confidence=confidence,
             rationale=rationale,
             quotes=quotes,
@@ -312,6 +319,10 @@ def process_request(session: Session, request_id: int, deps: Deps) -> str:
                     kind=SuggestionKind.related,
                     label=s.label,
                     routing_score=s.score,
+                    routing_mode=deps.mode,
+                    similarity=s.similarity,
+                    area_match=s.area_match,
+                    persona_match=s.persona_match,
                     model_confidence=c,
                     rationale=why,
                     quotes=q,
@@ -335,8 +346,26 @@ def process_request(session: Session, request_id: int, deps: Deps) -> str:
     return route.band
 
 
+def baseline_reason(score: float, t: Thresholds) -> str:
+    """Offline mode has no model to explain itself, so the routing is explained in words (rule 6)."""
+    band = "auto-link" if score >= t.auto else "suggest" if score >= t.suggest else "new need"
+    return (
+        f"Offline baseline: the request's embedding is {score:.3f} similar to this need. Auto-link at "
+        f"{t.auto:.3f} or more, suggest at {t.suggest:.3f} or more, so: {band}. No model judged it."
+    )
+
+
+def claim_baseline_reason(similarity: float, t: Thresholds) -> str:
+    """Why the offline baseline disputed a claim, in words (rule 6)."""
+    return (
+        f"Offline baseline: the reason given for this claim is {similarity:.3f} similar to the claimed need. A claim "
+        f"is confirmed at {t.suggest:.3f} or more, so a PM decides. No model judged it."
+    )
+
+
 def dispute_claim(session: Session, sup: Support, reason: str, alternative: int | None = None,
-                  rationale: str | None = None, score: float | None = None, run_id: int | None = None) -> None:  # fmt: skip
+                  rationale: str | None = None, score: float | None = None, run_id: int | None = None,
+                  parts: Scored | None = None, mode: str | None = None) -> None:  # fmt: skip
     """The claim stays uncounted and goes to the PM inbox (Disputed claims)."""
     sup.link_status, sup.review_reason, sup.updated_at = SupportLinkStatus.disputed, reason, utcnow()
     session.add(sup)
@@ -348,6 +377,11 @@ def dispute_claim(session: Session, sup: Support, reason: str, alternative: int 
             state=SuggestionState.proposed,
             rationale=rationale or reason,
             routing_score=score,
+            label=parts.label if parts else None,
+            routing_mode=mode if parts else None,
+            similarity=parts.similarity if parts else None,
+            area_match=parts.area_match if parts and mode != "baseline" else None,
+            persona_match=parts.persona_match if parts and mode != "baseline" else None,
             ai_run_id=run_id,
         )
     )
@@ -373,13 +407,14 @@ def process_claim(session: Session, support_id: int, deps: Deps) -> str:
         dispute_claim(session, sup, "the claimed need is no longer open")
         session.commit()
         return "disputed"
-    ex, _ = deps.gateway.extract(text=text, why=None, role=role)
+    ex, ex_run = deps.gateway.extract(text=text, why=None, role=role)
     best_other: Scored | None = None
     if deps.mode == "baseline":
         assert deps.baseline is not None
         sim = sims.get(sup.need_id, 0.0)
         label = "same_need" if sim >= deps.baseline.suggest else "different"
-        claimed: Scored | None = Scored(sup.need_id, label, sim, False, False, sim)
+        claimed: Scored | None = Scored(sup.need_id, "similar" if label == "same_need" else "different", sim,
+                                        False, False, sim)  # fmt: skip
         confirmed = label == "same_need"
         adj_run: int | None = None
     else:
@@ -407,20 +442,29 @@ def process_claim(session: Session, support_id: int, deps: Deps) -> str:
                 state=SuggestionState.applied,
                 label=claimed.label,
                 routing_score=claimed.score,
-                ai_run_id=adj_run,
+                routing_mode=deps.mode,
+                similarity=claimed.similarity,
+                area_match=claimed.area_match if deps.mode == "llm" else None,
+                persona_match=claimed.persona_match if deps.mode == "llm" else None,
+                ai_run_id=adj_run or ex_run,
             )
         )
         session.flush()
         queue_fit_if_due(session, sup.need_id, deps.priorities)
         session.commit()
         return "confirmed"
+    offline = deps.mode == "baseline" and deps.baseline is not None and claimed is not None
     dispute_claim(
         session,
         sup,
-        "the model does not read this as the same need",
+        claim_baseline_reason(claimed.similarity, deps.baseline)  # type: ignore[arg-type,union-attr]
+        if offline
+        else "the model does not read this as the same need",
         alternative=best_other.need_id if best_other else None,
         score=claimed.score if claimed else None,
-        run_id=adj_run,
+        run_id=adj_run or ex_run,
+        parts=claimed,
+        mode=deps.mode,
     )
     session.commit()
     return "disputed"

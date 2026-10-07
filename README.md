@@ -1,6 +1,6 @@
 # Distill
 
-AI-first feature intelligence for a product team: unstructured feature requests in, deduplicated, need-centric and prioritized decisions out, with a PM in the loop. Built for the MetaCTO technical assessment ([docs/assignment.md](docs/assignment.md)). Work in progress: the backend and the AI layer exist; the frontend has its shell and golden-path specs, and the pages come next.
+AI-first feature intelligence for a product team: unstructured feature requests in, deduplicated, need-centric and prioritized decisions out, with a PM in the loop. Built for the MetaCTO technical assessment ([docs/assignment.md](docs/assignment.md)). Work in progress: the backend, the AI layer, the requester portal and the PM workspace (triage, priorities, need detail, AI Ops) exist and pass the golden-path specs; stakeholder updates (F7) come next.
 
 - What and why: [docs/spec.md](docs/spec.md) · Architecture: [docs/architecture.md](docs/architecture.md) · Decisions: [docs/adr/](docs/adr/)
 - Evals: [evals/REPORT.md](evals/REPORT.md) · Requirements traceability: [docs/requirements.md](docs/requirements.md)

@@ -199,6 +199,11 @@ class AISuggestion(SQLModel, table=True):
     kind: SuggestionKind
     label: str | None = None  # same_need | related | different
     routing_score: float | None = None
+    # The parts of the routing score (ADR 0003), kept so the inbox can show how it was reached
+    routing_mode: str | None = None  # llm | baseline: which policy made the decision
+    similarity: float | None = None
+    area_match: bool | None = None
+    persona_match: bool | None = None
     model_confidence: float | None = None
     rationale: str | None = None
     quotes: list[str] = Field(default_factory=list, sa_column=Column(JSON))
@@ -240,6 +245,17 @@ class GoalRating(SQLModel, table=True):
     quote: str | None = None  # kept only if found verbatim in the requests the model was given
     quote_dropped: bool = False  # the model quoted something that isn't in them
     created_at: datetime = Field(default_factory=utcnow)
+
+
+class NeedStatusChange(SQLModel, table=True):
+    """Append-only history of a need's status: a human product decision (spec §7), and M3's start time."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    need_id: int = Field(foreign_key="need.id", index=True)
+    from_status: NeedStatus
+    to_status: NeedStatus
+    by: str
+    created_at: datetime = Field(default_factory=utcnow, index=True)
 
 
 class StakeholderUpdate(SQLModel, table=True):

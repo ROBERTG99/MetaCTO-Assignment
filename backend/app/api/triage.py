@@ -29,8 +29,8 @@ class Decision(BaseModel):
     response_model=TriageList,
     summary="The PM inbox: suggestions, claim disputes, the audit sample and failures",
 )
-def list_triage(session: Session = Depends(get_session)) -> dict[str, Any]:
-    return service.list_triage(session)
+def list_triage(request: Request, session: Session = Depends(get_session)) -> dict[str, Any]:
+    return service.list_triage(session, request.app.state.deps)
 
 
 @router.post(

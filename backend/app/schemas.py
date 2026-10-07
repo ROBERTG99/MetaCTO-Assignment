@@ -100,6 +100,40 @@ class AccountOut(BaseModel):
     renewal_date: date | None
 
 
+class AISource(BaseModel):
+    """Which model (or "offline-baseline") produced an AI value, with which prompt, in which ai_runs row."""
+
+    model: str | None
+    prompt_version: str | None
+    ai_run_id: int | None
+
+
+class RequestAnalysis(BaseModel):
+    """The extraction step's reading of one request (AI-generated: show source, confidence, rationale)."""
+
+    need_statement: str | None
+    problem: str | None
+    persona: str | None
+    job_to_be_done: str | None
+    proposed_solution: str | None
+    product_area: str | None
+    severity_signal: str | None
+    confidence: float | None
+    rationale: str | None
+    source: AISource | None
+
+
+class LinkInfo(BaseModel):
+    """How the request joined this need: by the intake workflow (auto), a PM, or as the need's first request."""
+
+    actor: str
+    at: datetime
+    routing_score: float | None
+    label: str | None
+    rationale: str | None
+    source: AISource | None
+
+
 class NeedRequestOut(BaseModel):
     id: int
     title: str
@@ -109,6 +143,8 @@ class NeedRequestOut(BaseModel):
     requester_name: str
     account_name: str | None
     created_at: datetime
+    analysis: RequestAnalysis | None = None
+    link: LinkInfo | None = None
 
 
 class DemandOut(BaseModel):
@@ -202,12 +238,64 @@ class NeedPage(BaseModel):
     page_size: int
 
 
+class NeedOrigin(BaseModel):
+    created_by: str = Field(description="ai | pm | seed")
+    source: AISource | None
+    rationale: str | None
+    created_at: datetime
+
+
+class Evidence(BaseModel):
+    quote: str = Field(description="Verbatim from a request, verified in code")
+    kind: Literal["link", "strategic_fit"]
+    request_id: int | None
+    goal: str | None
+
+
+class AuditEvent(BaseModel):
+    at: datetime
+    kind: Literal["link", "unlink", "status", "decision", "ai_run"]
+    actor: str = Field(description="auto, pm (or the PM's name), requester_claim, or the model for ai_run")
+    summary: str
+    request_id: int | None = None
+    model: str | None = None
+
+
+class UpdateOut(BaseModel):
+    id: int
+    kind: str = Field(
+        description="requester_update (to requester_id) or cs_note (for an account; PM view only)"
+    )
+    requester_id: int | None
+    body: str
+    requester_name: str | None
+    approved_at: datetime | None
+
+
 class NeedDetail(NeedSummary):
     job_to_be_done: str | None
     merged_into_id: int | None
     requests: list[NeedRequestOut]
     supports: list[SupportOut]
     accounts: list[AccountOut]
+    origin: NeedOrigin
+    evidence: list[Evidence]
+    updates: list[UpdateOut] = Field(
+        description="Approved updates sent to supporters (drafts are never shown)"
+    )
+    audit_trail: list[AuditEvent] = Field(
+        description="Links, unlinks, status changes, decisions and AI runs, newest first"
+    )
+
+
+SettableStatus = Literal["open", "planned", "in_progress", "shipped", "declined"]
+
+
+class NeedStatusUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: SettableStatus = Field(description="A human product decision; merged is set only by merging")
+    by: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 
 
 class NeedRef(BaseModel):
@@ -218,12 +306,37 @@ class NeedRef(BaseModel):
     product_area: str | None
 
 
+class RoutingParts(BaseModel):
+    """How a routing score was reached (spec §8, ADR 0003). Points are on the score's own scale (0-1).
+
+    llm: label points (same_need or nothing) + similarity points + field-agreement points.
+    baseline (offline): the score is the embedding similarity itself; there is no label or field part.
+    """
+
+    mode: Literal["llm", "baseline"]
+    score: float | None
+    label: str | None
+    similarity: float | None = Field(description="Best cosine similarity; null if it couldn't be recovered")
+    area_match: bool | None
+    persona_match: bool | None
+    label_points: float
+    similarity_points: float
+    field_points: float
+    auto_threshold: float | None
+    suggest_threshold: float | None
+
+
 class TriageRequest(BaseModel):
     id: int
     title: str
     description: str
     need_statement: str | None
     persona: str | None
+    problem: str | None = None
+    product_area: str | None = None
+    requester_name: str | None = None
+    account_name: str | None = None
+    created_at: datetime | None = None
 
 
 class TriageSupport(BaseModel):
@@ -236,7 +349,7 @@ class TriageSupport(BaseModel):
 
 class TriageItem(BaseModel):
     id: int
-    kind: Literal["suggestion", "claim", "audit"]
+    kind: Literal["suggestion", "claim", "audit", "auto_link"]
     routing_score: float | None
     label: str | None
     model_confidence: float | None
@@ -249,6 +362,8 @@ class TriageItem(BaseModel):
     alternative_need: NeedRef | None = Field(description="Claim only: the need the model would pick instead")
     request: TriageRequest | None
     support: TriageSupport | None
+    source: AISource | None = Field(None, description="The run behind this decision")
+    routing: RoutingParts | None = None
 
 
 class FailedRequest(BaseModel):
@@ -259,7 +374,11 @@ class FailedRequest(BaseModel):
 
 
 class TriageList(BaseModel):
-    items: list[TriageItem]
+    items: list[TriageItem] = Field(description="Waiting for a decision: suggestions, claims, audit sample")
+    auto_linked: list[TriageItem] = Field(
+        description="Auto-links still in place, newest first (at most 50): each can be undone (CLAUDE.md rule 2)"
+    )
+    auto_linked_total: int = Field(description="All auto-links still in place")
     needs_review: list[FailedRequest]
 
 
@@ -316,3 +435,88 @@ class RequesterOut(BaseModel):
     account_id: int | None
     account_name: str | None = Field(description="None for Brightboard staff")
     segment: Segment | None
+
+
+class MyRequest(BaseModel):
+    id: int
+    title: str
+    description: str
+    status: RequestStatus
+    needs_review_reason: str | None
+    created_at: datetime
+    processed_at: datetime | None
+    need: NeedRef | None
+
+
+class RateOut(BaseModel):
+    k: int
+    n: int
+    value: float | None
+    low: float = Field(description="Wilson 95% lower bound")
+    high: float = Field(description="Wilson 95% upper bound")
+
+
+class RunStats(BaseModel):
+    step: str
+    model: str
+    prompt_version: str
+    calls: int
+    ok: int
+    failure_rate: float
+    cost_usd: float
+    cost_per_call: float
+    p50_ms: int
+    p95_ms: int
+
+
+class OpsTotals(BaseModel):
+    calls: int
+    cost_usd: float
+    processed_requests: int
+    cost_per_request: float | None
+
+
+class FalseMergeOut(BaseModel):
+    audited: RateOut = Field(description="M4: audited auto-links marked false_merge / audited auto-links")
+    target: float
+    within_target: bool | None = Field(description="Upper bound at or under target; null with no audits")
+    auto_links: int
+    undone: int
+    undo_rate: float | None = Field(
+        description="Undone auto-links / auto-links: a lower bound on false merges"
+    )
+
+
+class M1Out(BaseModel):
+    processed: int = Field(description="Requests the intake workflow finished: processed or needs review")
+    untouched: int = Field(description="No PM link or decision, no open suggestion, not failed")
+    value: float | None = Field(description="Share of processed requests no PM had to touch")
+    pm_minutes_per_100: float | None = Field(description="Touched share x 100 requests x 2 minutes (spec A6)")
+
+
+class M2Out(BaseModel):
+    claims: int
+    new_requests: int
+    deflection: float | None = Field(description="Claims at the door / (claims + new requests)")
+    new_need_requests: int
+    relinked_by_pm: int
+    leakage: float | None = Field(
+        description="Requests routed to a new need that a PM later linked to an existing one"
+    )
+    note: str
+
+
+class M3Out(BaseModel):
+    value: float | None
+    note: str
+
+
+class OpsMetrics(BaseModel):
+    runs: list[RunStats]
+    totals: OpsTotals
+    acceptance: RateOut = Field(description="PM-accepted suggestions / decided suggestions")
+    needs_review: RateOut = Field(description="Guardrail: finished requests that failed to needs_review")
+    false_merge: FalseMergeOut
+    m1: M1Out
+    m2: M2Out
+    m3: M3Out

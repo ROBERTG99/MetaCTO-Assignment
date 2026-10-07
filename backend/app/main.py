@@ -13,7 +13,7 @@ from sqlmodel import Session
 
 from app import errors
 from app.ai.pipeline import Deps
-from app.api import insights, needs, requesters, requests, triage
+from app.api import insights, metrics, needs, requesters, requests, triage
 from app.db import create_tables, get_engine
 from app.worker import Worker
 
@@ -56,6 +56,7 @@ def create_app(engine: Engine | None = None, deps: Deps | None = None, start_wor
     app.include_router(triage.router)
     app.include_router(insights.router)
     app.include_router(requesters.router)
+    app.include_router(metrics.router)
     return app
 
 

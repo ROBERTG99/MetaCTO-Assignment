@@ -17,8 +17,8 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, SQLModel, select
 
-from app.ai.pipeline import fit_texts, verify_quotes
-from app.ai.policy import RoutingConfig, in_audit_sample, load_routing
+from app.ai.pipeline import _same, fit_texts, verify_quotes
+from app.ai.policy import RoutingConfig, in_audit_sample, load_routing, similarity_from_score
 from app.ai.redact import redact
 from app.ai.schemas import Extraction, FitRating
 from app.db import create_tables, get_engine
@@ -243,7 +243,12 @@ def apply_snapshot(session: Session, by_ref: dict[str, Request]) -> dict[str, in
             assert d.need_key is not None
             need = need_for(d.need_key, ex)
             auto = d.band == "auto"
+            area, persona = _same(ex.product_area, need.product_area), _same(ex.persona, need.persona)
             sug = AISuggestion(
+                routing_mode="llm",
+                similarity=similarity_from_score(d.label, d.score, area, persona, routing),
+                area_match=area,
+                persona_match=persona,
                 request_id=req.id,
                 need_id=need.id,
                 kind=SuggestionKind.duplicate,
@@ -276,8 +281,14 @@ def apply_snapshot(session: Session, by_ref: dict[str, Request]) -> dict[str, in
     for req, x, run_id in related:  # informational, only to needs that exist in the seeded backlog
         if x.need_key in needs:
             kept, _ = verify_quotes(x.quotes, req.redacted_text or "")
+            other = needs[x.need_key]
+            area, persona = _same(req.product_area, other.product_area), _same(req.persona, other.persona)
             session.add(
                 AISuggestion(
+                    routing_mode="llm",
+                    similarity=similarity_from_score(x.label, x.score, area, persona, routing),
+                    area_match=area,
+                    persona_match=persona,
                     request_id=req.id,
                     need_id=needs[x.need_key].id,
                     kind=SuggestionKind.related,

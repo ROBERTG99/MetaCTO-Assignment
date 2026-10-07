@@ -152,7 +152,7 @@ Notes for building the pages against these specs:
 - **Offline claims are disputed.** GP1's reason is 0.584 similar to SSO, below the suggest band, so the baseline disputes the claim; the spec accepts any of the three states.
 - **Polling.** My requests and the triage inbox must refetch on an interval while anything is pending (headless browsers don't refocus), or the 30 s waits fail.
 - **Stable hooks the pages must provide:** `data-testid` `support-confirmation`, `request-status`, `need-link`, `need-source`, `routing-badge`, `priority`, `points` (one per rated component; none for an unrated one), `priority-total`; `data-request-id` on Auto-linked articles; toasts through sonner's "Notifications" region.
-- **API work the pages need** (not built yet): the request's AI source on triage items and needs (model or offline-baseline); a deterministic rationale for baseline decisions (e.g. "Embedding similarity 0.735 to need 1; suggest band 0.651-0.767"), so "why" is never empty; `GET /requests?requester_id=` for My requests; an Auto-linked list for the triage tab; and a PM identity for the `by` field of triage actions.
+- **API work the pages needed** is built (2026-10-07): AI source and routing parts on triage items, a written reason for baseline decisions, `GET /requests?requester_id=`, the Auto-linked list (newest 50, with a total), need origin, analysis, evidence, updates and audit trail, `PATCH /needs/{id}`, and `GET /metrics`. All four specs pass (`make e2e`); contract tests in `api/test_workspace_api.py`.
 
 ## 5. What we deliberately don't test
 

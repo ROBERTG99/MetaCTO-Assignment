@@ -90,3 +90,20 @@ def test_routing_config_loads_the_llm_section(tmp_path: Path) -> None:
         4,
         "x",
     )
+
+
+@pytest.mark.parametrize(
+    ("sim", "area", "persona"), [(0.62, True, False), (0.80, True, True), (0.70, False, False)]
+)
+def test_similarity_is_recovered_from_a_score_when_it_was_not_clipped(
+    sim: float, area: bool, persona: bool
+) -> None:
+    from app.ai.policy import similarity_from_score
+
+    cfg = RoutingConfig(w_label=0.5, w_sim=0.3, w_fields=0.2, s_min=0.55, s_max=0.85, auto=0.7, suggest=0.6,
+                        audit_rate=0.1, audit_seed="t", top_k=5)  # fmt: skip
+    score = routing_score("same_need", sim, area, persona, cfg)
+    assert similarity_from_score("same_need", score, area, persona, cfg) == pytest.approx(sim)
+    clipped = routing_score("same_need", 0.95, area, persona, cfg)  # above s_max: the exact value is lost
+    assert similarity_from_score("same_need", clipped, area, persona, cfg) is None
+    assert similarity_from_score("related", 0.0, area, persona, cfg) is None

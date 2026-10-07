@@ -1,9 +1,9 @@
 """Submitting a request: saved as pending for the worker, before any AI work (ADR 0007)."""
 
-from sqlmodel import Session
+from sqlmodel import Session, col, select
 
 from app.errors import AppError
-from app.models import Account, Request, Requester, RequestSource, RequestStatus
+from app.models import Account, Need, Request, Requester, RequestSource, RequestStatus
 from app.schemas import RequestCreate
 
 
@@ -50,3 +50,35 @@ def create_request(session: Session, body: RequestCreate) -> Request:
     session.commit()
     session.refresh(request)
     return request
+
+
+def list_mine(session: Session, requester_id: int) -> list[dict[str, object]]:
+    """A requester's own requests, newest first, with the need each one ended up in."""
+    get_requester(session, requester_id)
+    rows = session.exec(
+        select(Request, Need)
+        .join(Need, col(Need.id) == Request.need_id, isouter=True)
+        .where(Request.requester_id == requester_id)
+        .order_by(col(Request.created_at).desc(), col(Request.id).desc())
+    ).all()
+    return [
+        {
+            "id": r.id,
+            "title": r.title,
+            "description": r.description,
+            "status": r.status,
+            "needs_review_reason": r.needs_review_reason,
+            "created_at": r.created_at,
+            "processed_at": r.processed_at,
+            "need": {
+                "id": n.id,
+                "title": n.title,
+                "problem": n.problem,
+                "persona": n.persona,
+                "product_area": n.product_area,
+            }
+            if n
+            else None,
+        }
+        for r, n in rows
+    ]

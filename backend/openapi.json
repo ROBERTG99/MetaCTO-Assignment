@@ -14,14 +14,14 @@
         "description": "Saves the request as `pending` and returns at once; the intake workflow runs later.",
         "operationId": "create_request_requests_post",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/RequestCreate"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "201": {
@@ -35,14 +35,60 @@
             }
           },
           "422": {
-            "description": "Unprocessable Entity",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "requests"
+        ],
+        "summary": "A requester's own requests, newest first, with their status and need",
+        "operationId": "my_requests_requests_get",
+        "parameters": [
+          {
+            "name": "requester_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Requester Id"
             }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MyRequest"
+                  },
+                  "title": "Response My Requests Requests Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
           }
         }
       }
@@ -276,6 +322,79 @@
               }
             },
             "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "needs"
+        ],
+        "summary": "Set a need's status (a human product decision)",
+        "description": "Appends to the status history, shown in the audit trail. 409 for a merged need.",
+        "operationId": "set_status_needs__need_id__patch",
+        "parameters": [
+          {
+            "name": "need_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Need Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NeedStatusUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NeedDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "content": {
@@ -664,10 +783,76 @@
           }
         }
       }
+    },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "metrics"
+        ],
+        "summary": "AI Ops and the success metrics (spec §10): calls, cost, latency, acceptance, false merges, M1-M3",
+        "operationId": "overview_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsMetrics"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AISource": {
+        "properties": {
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Version"
+          },
+          "ai_run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Run Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "model",
+          "prompt_version",
+          "ai_run_id"
+        ],
+        "title": "AISource",
+        "description": "Which model (or \"offline-baseline\") produced an AI value, with which prompt, in which ai_runs row."
+      },
       "AccountOut": {
         "properties": {
           "id": {
@@ -724,6 +909,65 @@
           "renewal_date"
         ],
         "title": "AccountOut"
+      },
+      "AuditEvent": {
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "link",
+              "unlink",
+              "status",
+              "decision",
+              "ai_run"
+            ],
+            "title": "Kind"
+          },
+          "actor": {
+            "type": "string",
+            "title": "Actor",
+            "description": "auto, pm (or the PM's name), requester_claim, or the model for ai_run"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          }
+        },
+        "type": "object",
+        "required": [
+          "at",
+          "kind",
+          "actor",
+          "summary"
+        ],
+        "title": "AuditEvent"
       },
       "Decision": {
         "properties": {
@@ -903,6 +1147,53 @@
         ],
         "title": "ErrorResponse"
       },
+      "Evidence": {
+        "properties": {
+          "quote": {
+            "type": "string",
+            "title": "Quote",
+            "description": "Verbatim from a request, verified in code"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "link",
+              "strategic_fit"
+            ],
+            "title": "Kind"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "goal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal"
+          }
+        },
+        "type": "object",
+        "required": [
+          "quote",
+          "kind",
+          "request_id",
+          "goal"
+        ],
+        "title": "Evidence"
+      },
       "FailedRequest": {
         "properties": {
           "id": {
@@ -937,6 +1228,60 @@
           "attempts"
         ],
         "title": "FailedRequest"
+      },
+      "FalseMergeOut": {
+        "properties": {
+          "audited": {
+            "$ref": "#/components/schemas/RateOut",
+            "description": "M4: audited auto-links marked false_merge / audited auto-links"
+          },
+          "target": {
+            "type": "number",
+            "title": "Target"
+          },
+          "within_target": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Within Target",
+            "description": "Upper bound at or under target; null with no audits"
+          },
+          "auto_links": {
+            "type": "integer",
+            "title": "Auto Links"
+          },
+          "undone": {
+            "type": "integer",
+            "title": "Undone"
+          },
+          "undo_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Undo Rate",
+            "description": "Undone auto-links / auto-links: a lower bound on false merges"
+          }
+        },
+        "type": "object",
+        "required": [
+          "audited",
+          "target",
+          "within_target",
+          "auto_links",
+          "undone",
+          "undo_rate"
+        ],
+        "title": "FalseMergeOut"
       },
       "GoalRatingOut": {
         "properties": {
@@ -1024,6 +1369,272 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "LinkInfo": {
+        "properties": {
+          "actor": {
+            "type": "string",
+            "title": "Actor"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          },
+          "routing_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Routing Score"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AISource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "actor",
+          "at",
+          "routing_score",
+          "label",
+          "rationale",
+          "source"
+        ],
+        "title": "LinkInfo",
+        "description": "How the request joined this need: by the intake workflow (auto), a PM, or as the need's first request."
+      },
+      "M1Out": {
+        "properties": {
+          "processed": {
+            "type": "integer",
+            "title": "Processed",
+            "description": "Requests the intake workflow finished: processed or needs review"
+          },
+          "untouched": {
+            "type": "integer",
+            "title": "Untouched",
+            "description": "No PM link or decision, no open suggestion, not failed"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value",
+            "description": "Share of processed requests no PM had to touch"
+          },
+          "pm_minutes_per_100": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pm Minutes Per 100",
+            "description": "Touched share x 100 requests x 2 minutes (spec A6)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "processed",
+          "untouched",
+          "value",
+          "pm_minutes_per_100"
+        ],
+        "title": "M1Out"
+      },
+      "M2Out": {
+        "properties": {
+          "claims": {
+            "type": "integer",
+            "title": "Claims"
+          },
+          "new_requests": {
+            "type": "integer",
+            "title": "New Requests"
+          },
+          "deflection": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deflection",
+            "description": "Claims at the door / (claims + new requests)"
+          },
+          "new_need_requests": {
+            "type": "integer",
+            "title": "New Need Requests"
+          },
+          "relinked_by_pm": {
+            "type": "integer",
+            "title": "Relinked By Pm"
+          },
+          "leakage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leakage",
+            "description": "Requests routed to a new need that a PM later linked to an existing one"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "claims",
+          "new_requests",
+          "deflection",
+          "new_need_requests",
+          "relinked_by_pm",
+          "leakage",
+          "note"
+        ],
+        "title": "M2Out"
+      },
+      "M3Out": {
+        "properties": {
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "value",
+          "note"
+        ],
+        "title": "M3Out"
+      },
+      "MyRequest": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RequestStatus"
+          },
+          "needs_review_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Needs Review Reason"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "processed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processed At"
+          },
+          "need": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NeedRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "description",
+          "status",
+          "needs_review_reason",
+          "created_at",
+          "processed_at",
+          "need"
+        ],
+        "title": "MyRequest"
       },
       "NeedDetail": {
         "properties": {
@@ -1149,6 +1760,32 @@
             },
             "type": "array",
             "title": "Accounts"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/NeedOrigin"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            },
+            "type": "array",
+            "title": "Evidence"
+          },
+          "updates": {
+            "items": {
+              "$ref": "#/components/schemas/UpdateOut"
+            },
+            "type": "array",
+            "title": "Updates",
+            "description": "Approved updates sent to supporters (drafts are never shown)"
+          },
+          "audit_trail": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEvent"
+            },
+            "type": "array",
+            "title": "Audit Trail",
+            "description": "Links, unlinks, status changes, decisions and AI runs, newest first"
           }
         },
         "type": "object",
@@ -1171,9 +1808,56 @@
           "merged_into_id",
           "requests",
           "supports",
-          "accounts"
+          "accounts",
+          "origin",
+          "evidence",
+          "updates",
+          "audit_trail"
         ],
         "title": "NeedDetail"
+      },
+      "NeedOrigin": {
+        "properties": {
+          "created_by": {
+            "type": "string",
+            "title": "Created By",
+            "description": "ai | pm | seed"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AISource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "created_by",
+          "source",
+          "rationale",
+          "created_at"
+        ],
+        "title": "NeedOrigin"
       },
       "NeedPage": {
         "properties": {
@@ -1292,6 +1976,26 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "analysis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RequestAnalysis"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "link": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LinkInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -1318,6 +2022,35 @@
           "merged"
         ],
         "title": "NeedStatus"
+      },
+      "NeedStatusUpdate": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "planned",
+              "in_progress",
+              "shipped",
+              "declined"
+            ],
+            "title": "Status",
+            "description": "A human product decision; merged is set only by merging"
+          },
+          "by": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "By"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "by"
+        ],
+        "title": "NeedStatusUpdate"
       },
       "NeedSummary": {
         "properties": {
@@ -1420,6 +2153,87 @@
           "created_at"
         ],
         "title": "NeedSummary"
+      },
+      "OpsMetrics": {
+        "properties": {
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/RunStats"
+            },
+            "type": "array",
+            "title": "Runs"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/OpsTotals"
+          },
+          "acceptance": {
+            "$ref": "#/components/schemas/RateOut",
+            "description": "PM-accepted suggestions / decided suggestions"
+          },
+          "needs_review": {
+            "$ref": "#/components/schemas/RateOut",
+            "description": "Guardrail: finished requests that failed to needs_review"
+          },
+          "false_merge": {
+            "$ref": "#/components/schemas/FalseMergeOut"
+          },
+          "m1": {
+            "$ref": "#/components/schemas/M1Out"
+          },
+          "m2": {
+            "$ref": "#/components/schemas/M2Out"
+          },
+          "m3": {
+            "$ref": "#/components/schemas/M3Out"
+          }
+        },
+        "type": "object",
+        "required": [
+          "runs",
+          "totals",
+          "acceptance",
+          "needs_review",
+          "false_merge",
+          "m1",
+          "m2",
+          "m3"
+        ],
+        "title": "OpsMetrics"
+      },
+      "OpsTotals": {
+        "properties": {
+          "calls": {
+            "type": "integer",
+            "title": "Calls"
+          },
+          "cost_usd": {
+            "type": "number",
+            "title": "Cost Usd"
+          },
+          "processed_requests": {
+            "type": "integer",
+            "title": "Processed Requests"
+          },
+          "cost_per_request": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Per Request"
+          }
+        },
+        "type": "object",
+        "required": [
+          "calls",
+          "cost_usd",
+          "processed_requests",
+          "cost_per_request"
+        ],
+        "title": "OpsTotals"
       },
       "PriorityBreakdown": {
         "properties": {
@@ -1607,6 +2421,176 @@
           "not_rated"
         ],
         "title": "QuadrantView"
+      },
+      "RateOut": {
+        "properties": {
+          "k": {
+            "type": "integer",
+            "title": "K"
+          },
+          "n": {
+            "type": "integer",
+            "title": "N"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "low": {
+            "type": "number",
+            "title": "Low",
+            "description": "Wilson 95% lower bound"
+          },
+          "high": {
+            "type": "number",
+            "title": "High",
+            "description": "Wilson 95% upper bound"
+          }
+        },
+        "type": "object",
+        "required": [
+          "k",
+          "n",
+          "value",
+          "low",
+          "high"
+        ],
+        "title": "RateOut"
+      },
+      "RequestAnalysis": {
+        "properties": {
+          "need_statement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Need Statement"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem"
+          },
+          "persona": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona"
+          },
+          "job_to_be_done": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job To Be Done"
+          },
+          "proposed_solution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposed Solution"
+          },
+          "product_area": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Area"
+          },
+          "severity_signal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity Signal"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AISource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "need_statement",
+          "problem",
+          "persona",
+          "job_to_be_done",
+          "proposed_solution",
+          "product_area",
+          "severity_signal",
+          "confidence",
+          "rationale",
+          "source"
+        ],
+        "title": "RequestAnalysis",
+        "description": "The extraction step's reading of one request (AI-generated: show source, confidence, rationale)."
       },
       "RequestCreate": {
         "properties": {
@@ -1860,6 +2844,182 @@
           "segment"
         ],
         "title": "RequesterOut"
+      },
+      "RoutingParts": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "llm",
+              "baseline"
+            ],
+            "title": "Mode"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "similarity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Similarity",
+            "description": "Best cosine similarity; null if it couldn't be recovered"
+          },
+          "area_match": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area Match"
+          },
+          "persona_match": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona Match"
+          },
+          "label_points": {
+            "type": "number",
+            "title": "Label Points"
+          },
+          "similarity_points": {
+            "type": "number",
+            "title": "Similarity Points"
+          },
+          "field_points": {
+            "type": "number",
+            "title": "Field Points"
+          },
+          "auto_threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Threshold"
+          },
+          "suggest_threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggest Threshold"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mode",
+          "score",
+          "label",
+          "similarity",
+          "area_match",
+          "persona_match",
+          "label_points",
+          "similarity_points",
+          "field_points",
+          "auto_threshold",
+          "suggest_threshold"
+        ],
+        "title": "RoutingParts",
+        "description": "How a routing score was reached (spec §8, ADR 0003). Points are on the score's own scale (0-1).\n\nllm: label points (same_need or nothing) + similarity points + field-agreement points.\nbaseline (offline): the score is the embedding similarity itself; there is no label or field part."
+      },
+      "RunStats": {
+        "properties": {
+          "step": {
+            "type": "string",
+            "title": "Step"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          },
+          "calls": {
+            "type": "integer",
+            "title": "Calls"
+          },
+          "ok": {
+            "type": "integer",
+            "title": "Ok"
+          },
+          "failure_rate": {
+            "type": "number",
+            "title": "Failure Rate"
+          },
+          "cost_usd": {
+            "type": "number",
+            "title": "Cost Usd"
+          },
+          "cost_per_call": {
+            "type": "number",
+            "title": "Cost Per Call"
+          },
+          "p50_ms": {
+            "type": "integer",
+            "title": "P50 Ms"
+          },
+          "p95_ms": {
+            "type": "integer",
+            "title": "P95 Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "step",
+          "model",
+          "prompt_version",
+          "calls",
+          "ok",
+          "failure_rate",
+          "cost_usd",
+          "cost_per_call",
+          "p50_ms",
+          "p95_ms"
+        ],
+        "title": "RunStats"
       },
       "Segment": {
         "type": "string",
@@ -2155,7 +3315,8 @@
             "enum": [
               "suggestion",
               "claim",
-              "audit"
+              "audit",
+              "auto_link"
             ],
             "title": "Kind"
           },
@@ -2256,6 +3417,27 @@
                 "type": "null"
               }
             ]
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AISource"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The run behind this decision"
+          },
+          "routing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RoutingParts"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -2282,7 +3464,21 @@
               "$ref": "#/components/schemas/TriageItem"
             },
             "type": "array",
-            "title": "Items"
+            "title": "Items",
+            "description": "Waiting for a decision: suggestions, claims, audit sample"
+          },
+          "auto_linked": {
+            "items": {
+              "$ref": "#/components/schemas/TriageItem"
+            },
+            "type": "array",
+            "title": "Auto Linked",
+            "description": "Auto-links still in place, newest first (at most 50): each can be undone (CLAUDE.md rule 2)"
+          },
+          "auto_linked_total": {
+            "type": "integer",
+            "title": "Auto Linked Total",
+            "description": "All auto-links still in place"
           },
           "needs_review": {
             "items": {
@@ -2295,6 +3491,8 @@
         "type": "object",
         "required": [
           "items",
+          "auto_linked",
+          "auto_linked_total",
           "needs_review"
         ],
         "title": "TriageList"
@@ -2334,6 +3532,62 @@
               }
             ],
             "title": "Persona"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem"
+          },
+          "product_area": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Area"
+          },
+          "requester_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requester Name"
+          },
+          "account_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Name"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
           }
         },
         "type": "object",
@@ -2413,6 +3667,67 @@
           "title"
         ],
         "title": "UnlinkResult"
+      },
+      "UpdateOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "description": "requester_update (to requester_id) or cs_note (for an account; PM view only)"
+          },
+          "requester_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requester Id"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "requester_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requester Name"
+          },
+          "approved_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "requester_id",
+          "body",
+          "requester_name",
+          "approved_at"
+        ],
+        "title": "UpdateOut"
       },
       "UrgencyOut": {
         "properties": {

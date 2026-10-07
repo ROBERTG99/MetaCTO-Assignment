@@ -14,6 +14,7 @@ from app.models import (
     NeedStatus,
     Request,
     RequestStatus,
+    SuggestionKind,
     SuggestionState,
     Support,
     SupportLinkStatus,
@@ -253,3 +254,33 @@ def test_a_need_merged_during_the_model_call_is_followed(
     process_request(db, r.id, deps)  # type: ignore[arg-type]
     db.refresh(r)
     assert r.need_id == b.dark.id
+
+
+def test_a_routed_suggestion_stores_the_parts_of_its_score(
+    db: Session, make: Factory, deps: Deps, fake_llm: FakeLLM
+) -> None:
+    b = build(db, make, deps)
+    r = new_request(make, b.it, *SSO_TEXT)
+    fake_llm.script("extract", extraction(persona="finance"))  # area agrees, persona doesn't
+    fake_llm.script("adjudicate", judge(**{str(b.sso.id): "same_need"}))
+    process_request(db, r.id, deps)  # type: ignore[arg-type]
+    [sug] = db.exec(select(AISuggestion).where(AISuggestion.request_id == r.id)).all()
+    assert (sug.area_match, sug.persona_match) == (True, False)
+    assert sug.similarity is not None and 0 < sug.similarity <= 1 + 1e-6  # float32 cosine
+
+
+def test_an_offline_baseline_decision_says_why_in_words(db: Session, make: Factory, deps: Deps) -> None:
+    from app.ai.baseline import Thresholds
+
+    offline = dataclasses.replace(deps, mode="baseline", baseline=Thresholds(auto=1.01, suggest=-1.0))
+    b = build(db, make, offline)
+    r = new_request(make, b.it, *SSO_TEXT)
+    assert process_request(db, r.id, offline) == "suggest"  # type: ignore[arg-type]
+    [sug] = db.exec(
+        select(AISuggestion).where(
+            AISuggestion.request_id == r.id, AISuggestion.kind == SuggestionKind.duplicate
+        )
+    ).all()
+    assert sug.label == "similar" and sug.similarity == sug.routing_score
+    assert sug.rationale is not None and sug.rationale.startswith("Offline baseline")
+    assert f"{sug.routing_score:.3f}" in sug.rationale and "similar" in sug.rationale

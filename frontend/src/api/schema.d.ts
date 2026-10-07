@@ -11,7 +11,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** A requester's own requests, newest first, with their status and need */
+        get: operations["my_requests_requests_get"];
         put?: never;
         /**
          * Submit a feature request
@@ -72,7 +73,11 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Set a need's status (a human product decision)
+         * @description Appends to the status history, shown in the audit trail. 409 for a merged need.
+         */
+        patch: operations["set_status_needs__need_id__patch"];
         trace?: never;
     };
     "/needs/{need_id}/support": {
@@ -200,10 +205,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** AI Ops and the success metrics (spec §10): calls, cost, latency, acceptance, false merges, M1-M3 */
+        get: operations["overview_metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AISource
+         * @description Which model (or "offline-baseline") produced an AI value, with which prompt, in which ai_runs row.
+         */
+        AISource: {
+            /** Model */
+            model: string | null;
+            /** Prompt Version */
+            prompt_version: string | null;
+            /** Ai Run Id */
+            ai_run_id: number | null;
+        };
         /** AccountOut */
         AccountOut: {
             /** Id */
@@ -219,6 +253,30 @@ export interface components {
             pipeline_value: number | null;
             /** Renewal Date */
             renewal_date: string | null;
+        };
+        /** AuditEvent */
+        AuditEvent: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "link" | "unlink" | "status" | "decision" | "ai_run";
+            /**
+             * Actor
+             * @description auto, pm (or the PM's name), requester_claim, or the model for ai_run
+             */
+            actor: string;
+            /** Summary */
+            summary: string;
+            /** Request Id */
+            request_id?: number | null;
+            /** Model */
+            model?: string | null;
         };
         /**
          * Decision
@@ -295,6 +353,23 @@ export interface components {
         ErrorResponse: {
             error: components["schemas"]["ErrorInfo"];
         };
+        /** Evidence */
+        Evidence: {
+            /**
+             * Quote
+             * @description Verbatim from a request, verified in code
+             */
+            quote: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "link" | "strategic_fit";
+            /** Request Id */
+            request_id: number | null;
+            /** Goal */
+            goal: string | null;
+        };
         /** FailedRequest */
         FailedRequest: {
             /** Id */
@@ -305,6 +380,27 @@ export interface components {
             reason: string | null;
             /** Attempts */
             attempts: number;
+        };
+        /** FalseMergeOut */
+        FalseMergeOut: {
+            /** @description M4: audited auto-links marked false_merge / audited auto-links */
+            audited: components["schemas"]["RateOut"];
+            /** Target */
+            target: number;
+            /**
+             * Within Target
+             * @description Upper bound at or under target; null with no audits
+             */
+            within_target: boolean | null;
+            /** Auto Links */
+            auto_links: number;
+            /** Undone */
+            undone: number;
+            /**
+             * Undo Rate
+             * @description Undone auto-links / auto-links: a lower bound on false merges
+             */
+            undo_rate: number | null;
         };
         /** GoalRatingOut */
         GoalRatingOut: {
@@ -344,6 +440,99 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * LinkInfo
+         * @description How the request joined this need: by the intake workflow (auto), a PM, or as the need's first request.
+         */
+        LinkInfo: {
+            /** Actor */
+            actor: string;
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Routing Score */
+            routing_score: number | null;
+            /** Label */
+            label: string | null;
+            /** Rationale */
+            rationale: string | null;
+            source: components["schemas"]["AISource"] | null;
+        };
+        /** M1Out */
+        M1Out: {
+            /**
+             * Processed
+             * @description Requests the intake workflow finished: processed or needs review
+             */
+            processed: number;
+            /**
+             * Untouched
+             * @description No PM link or decision, no open suggestion, not failed
+             */
+            untouched: number;
+            /**
+             * Value
+             * @description Share of processed requests no PM had to touch
+             */
+            value: number | null;
+            /**
+             * Pm Minutes Per 100
+             * @description Touched share x 100 requests x 2 minutes (spec A6)
+             */
+            pm_minutes_per_100: number | null;
+        };
+        /** M2Out */
+        M2Out: {
+            /** Claims */
+            claims: number;
+            /** New Requests */
+            new_requests: number;
+            /**
+             * Deflection
+             * @description Claims at the door / (claims + new requests)
+             */
+            deflection: number | null;
+            /** New Need Requests */
+            new_need_requests: number;
+            /** Relinked By Pm */
+            relinked_by_pm: number;
+            /**
+             * Leakage
+             * @description Requests routed to a new need that a PM later linked to an existing one
+             */
+            leakage: number | null;
+            /** Note */
+            note: string;
+        };
+        /** M3Out */
+        M3Out: {
+            /** Value */
+            value: number | null;
+            /** Note */
+            note: string;
+        };
+        /** MyRequest */
+        MyRequest: {
+            /** Id */
+            id: number;
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            status: components["schemas"]["RequestStatus"];
+            /** Needs Review Reason */
+            needs_review_reason: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Processed At */
+            processed_at: string | null;
+            need: components["schemas"]["NeedRef"] | null;
         };
         /** NeedDetail */
         NeedDetail: {
@@ -395,6 +584,35 @@ export interface components {
             supports: components["schemas"]["SupportOut"][];
             /** Accounts */
             accounts: components["schemas"]["AccountOut"][];
+            origin: components["schemas"]["NeedOrigin"];
+            /** Evidence */
+            evidence: components["schemas"]["Evidence"][];
+            /**
+             * Updates
+             * @description Approved updates sent to supporters (drafts are never shown)
+             */
+            updates: components["schemas"]["UpdateOut"][];
+            /**
+             * Audit Trail
+             * @description Links, unlinks, status changes, decisions and AI runs, newest first
+             */
+            audit_trail: components["schemas"]["AuditEvent"][];
+        };
+        /** NeedOrigin */
+        NeedOrigin: {
+            /**
+             * Created By
+             * @description ai | pm | seed
+             */
+            created_by: string;
+            source: components["schemas"]["AISource"] | null;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /** NeedPage */
         NeedPage: {
@@ -439,12 +657,25 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            analysis?: components["schemas"]["RequestAnalysis"] | null;
+            link?: components["schemas"]["LinkInfo"] | null;
         };
         /**
          * NeedStatus
          * @enum {string}
          */
         NeedStatus: "open" | "planned" | "in_progress" | "shipped" | "declined" | "merged";
+        /** NeedStatusUpdate */
+        NeedStatusUpdate: {
+            /**
+             * Status
+             * @description A human product decision; merged is set only by merging
+             * @enum {string}
+             */
+            status: "open" | "planned" | "in_progress" | "shipped" | "declined";
+            /** By */
+            by: string;
+        };
         /** NeedSummary */
         NeedSummary: {
             /** Id */
@@ -485,6 +716,31 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /** OpsMetrics */
+        OpsMetrics: {
+            /** Runs */
+            runs: components["schemas"]["RunStats"][];
+            totals: components["schemas"]["OpsTotals"];
+            /** @description PM-accepted suggestions / decided suggestions */
+            acceptance: components["schemas"]["RateOut"];
+            /** @description Guardrail: finished requests that failed to needs_review */
+            needs_review: components["schemas"]["RateOut"];
+            false_merge: components["schemas"]["FalseMergeOut"];
+            m1: components["schemas"]["M1Out"];
+            m2: components["schemas"]["M2Out"];
+            m3: components["schemas"]["M3Out"];
+        };
+        /** OpsTotals */
+        OpsTotals: {
+            /** Calls */
+            calls: number;
+            /** Cost Usd */
+            cost_usd: number;
+            /** Processed Requests */
+            processed_requests: number;
+            /** Cost Per Request */
+            cost_per_request: number | null;
         };
         /** PriorityBreakdown */
         PriorityBreakdown: {
@@ -564,6 +820,50 @@ export interface components {
              */
             not_rated: components["schemas"]["QuadrantNeed"][];
         };
+        /** RateOut */
+        RateOut: {
+            /** K */
+            k: number;
+            /** N */
+            n: number;
+            /** Value */
+            value: number | null;
+            /**
+             * Low
+             * @description Wilson 95% lower bound
+             */
+            low: number;
+            /**
+             * High
+             * @description Wilson 95% upper bound
+             */
+            high: number;
+        };
+        /**
+         * RequestAnalysis
+         * @description The extraction step's reading of one request (AI-generated: show source, confidence, rationale).
+         */
+        RequestAnalysis: {
+            /** Need Statement */
+            need_statement: string | null;
+            /** Problem */
+            problem: string | null;
+            /** Persona */
+            persona: string | null;
+            /** Job To Be Done */
+            job_to_be_done: string | null;
+            /** Proposed Solution */
+            proposed_solution: string | null;
+            /** Product Area */
+            product_area: string | null;
+            /** Severity Signal */
+            severity_signal: string | null;
+            /** Confidence */
+            confidence: number | null;
+            /** Rationale */
+            rationale: string | null;
+            source: components["schemas"]["AISource"] | null;
+        };
         /** RequestCreate */
         RequestCreate: {
             /** Requester Id */
@@ -640,6 +940,66 @@ export interface components {
              */
             account_name: string | null;
             segment: components["schemas"]["Segment"] | null;
+        };
+        /**
+         * RoutingParts
+         * @description How a routing score was reached (spec §8, ADR 0003). Points are on the score's own scale (0-1).
+         *
+         *     llm: label points (same_need or nothing) + similarity points + field-agreement points.
+         *     baseline (offline): the score is the embedding similarity itself; there is no label or field part.
+         */
+        RoutingParts: {
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "llm" | "baseline";
+            /** Score */
+            score: number | null;
+            /** Label */
+            label: string | null;
+            /**
+             * Similarity
+             * @description Best cosine similarity; null if it couldn't be recovered
+             */
+            similarity: number | null;
+            /** Area Match */
+            area_match: boolean | null;
+            /** Persona Match */
+            persona_match: boolean | null;
+            /** Label Points */
+            label_points: number;
+            /** Similarity Points */
+            similarity_points: number;
+            /** Field Points */
+            field_points: number;
+            /** Auto Threshold */
+            auto_threshold: number | null;
+            /** Suggest Threshold */
+            suggest_threshold: number | null;
+        };
+        /** RunStats */
+        RunStats: {
+            /** Step */
+            step: string;
+            /** Model */
+            model: string;
+            /** Prompt Version */
+            prompt_version: string;
+            /** Calls */
+            calls: number;
+            /** Ok */
+            ok: number;
+            /** Failure Rate */
+            failure_rate: number;
+            /** Cost Usd */
+            cost_usd: number;
+            /** Cost Per Call */
+            cost_per_call: number;
+            /** P50 Ms */
+            p50_ms: number;
+            /** P95 Ms */
+            p95_ms: number;
         };
         /**
          * Segment
@@ -741,7 +1101,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "suggestion" | "claim" | "audit";
+            kind: "suggestion" | "claim" | "audit" | "auto_link";
             /** Routing Score */
             routing_score: number | null;
             /** Label */
@@ -763,11 +1123,27 @@ export interface components {
             alternative_need: components["schemas"]["NeedRef"] | null;
             request: components["schemas"]["TriageRequest"] | null;
             support: components["schemas"]["TriageSupport"] | null;
+            /** @description The run behind this decision */
+            source?: components["schemas"]["AISource"] | null;
+            routing?: components["schemas"]["RoutingParts"] | null;
         };
         /** TriageList */
         TriageList: {
-            /** Items */
+            /**
+             * Items
+             * @description Waiting for a decision: suggestions, claims, audit sample
+             */
             items: components["schemas"]["TriageItem"][];
+            /**
+             * Auto Linked
+             * @description Auto-links still in place, newest first (at most 50): each can be undone (CLAUDE.md rule 2)
+             */
+            auto_linked: components["schemas"]["TriageItem"][];
+            /**
+             * Auto Linked Total
+             * @description All auto-links still in place
+             */
+            auto_linked_total: number;
             /** Needs Review */
             needs_review: components["schemas"]["FailedRequest"][];
         };
@@ -783,6 +1159,16 @@ export interface components {
             need_statement: string | null;
             /** Persona */
             persona: string | null;
+            /** Problem */
+            problem?: string | null;
+            /** Product Area */
+            product_area?: string | null;
+            /** Requester Name */
+            requester_name?: string | null;
+            /** Account Name */
+            account_name?: string | null;
+            /** Created At */
+            created_at?: string | null;
         };
         /** TriageSupport */
         TriageSupport: {
@@ -803,6 +1189,24 @@ export interface components {
             need_id: number;
             /** Title */
             title: string;
+        };
+        /** UpdateOut */
+        UpdateOut: {
+            /** Id */
+            id: number;
+            /**
+             * Kind
+             * @description requester_update (to requester_id) or cs_note (for an account; PM view only)
+             */
+            kind: string;
+            /** Requester Id */
+            requester_id: number | null;
+            /** Body */
+            body: string;
+            /** Requester Name */
+            requester_name: string | null;
+            /** Approved At */
+            approved_at: string | null;
         };
         /** UrgencyOut */
         UrgencyOut: {
@@ -842,6 +1246,37 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    my_requests_requests_get: {
+        parameters: {
+            query: {
+                requester_id: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyRequest"][];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     create_request_requests_post: {
         parameters: {
             query?: never;
@@ -967,6 +1402,59 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    set_status_needs__need_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                need_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NeedStatusUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NeedDetail"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1262,6 +1750,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RequesterOut"][];
+                };
+            };
+        };
+    };
+    overview_metrics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpsMetrics"];
                 };
             };
         };
