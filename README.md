@@ -8,7 +8,7 @@
 |---|---|
 | **Problem** | Intake: duplicates, unclear needs and lost demand all start when a request arrives, and PMs spend their hours there ([spec §1](docs/spec.md#1-problem-and-thesis)). |
 | **Who benefits** | PMs (an exception inbox instead of the stream), requesters (find and back an existing need; hear back when it's decided), CS and sales (accounts and renewals behind each need), product leaders (popular kept apart from strategic). |
-| **AI design** | A fixed workflow with two model steps (extract, adjudicate) on **Haiku 4.5**, chosen by eval: **91.3%** on the frozen test set, against **71.3%** for the no-LLM baseline and **74.7%** for Sonnet 5.5. |
+| **AI design** | A fixed intake workflow with two model steps (extract, adjudicate) on **Haiku 4.5**, chosen by eval: **91.3%** on the frozen test set, against **71.3%** for the no-LLM baseline and **74.7%** for Sonnet 5.5. A decision brief on demand: a workflow fed by the product's one bounded agent, which finds related needs with read-only tools ([example](docs/examples/brief-sso.md)). |
 | **Human judgment** | Gray-zone links, claim disputes, the audit sample, undo, every need's status, every message to a customer. |
 | **Measured** | Triage effort (M1), duplicate rate (M2), decision-loop latency (M3), audited false merges against a 3% target (M4), all on the AI Ops page. |
 
@@ -20,7 +20,7 @@ make seed    # the Brightboard demo data, with recorded Haiku 4.5 output: no key
 make dev     # API on :8000 (with its worker) and the web app on http://localhost:5173
 ```
 
-`make demo` does all three. Use the role switcher (top right) to act as a requester or as a PM. Everything runs offline by default (`AI_MODE=offline`): new submissions are routed by the embedding baseline, and the seed shows real model output recorded from the evals. Strategic fit isn't rated offline yet: its recorded ratings come from the labelled fit eval, which hasn't run, so seeded needs show "Not rated", needs changed offline show "Pending" (they are rated only in live mode), and the strategic side of the quadrant is empty. CI runs the parts of `make check` (lint, types, 400+ tests), `make e2e` (7 Playwright golden paths) and `make eval-gate` (free offline evals), plus the build and dependency audits.
+`make demo` does all three. Use the role switcher (top right) to act as a requester or as a PM. As a PM, open a need (try the SSO one) and click **Brief me**: the worker builds a decision brief, and "How this brief was built" shows the agent's steps and every model call. Offline the agent step is the embedding baseline and the brief a template, both labelled; `make brief-live` writes a real one (about $0.04). Everything runs offline by default (`AI_MODE=offline`): new submissions are routed by the embedding baseline, and the seed shows real model output recorded from the evals. Strategic fit isn't rated offline yet: its recorded ratings come from the labelled fit eval, which hasn't run, so seeded needs show "Not rated", needs changed offline show "Pending" (they are rated only in live mode), and the strategic side of the quadrant is empty. CI runs the parts of `make check` (lint, types, 400+ tests), `make e2e` (7 Playwright golden paths) and `make eval-gate` (free offline evals), plus the build and dependency audits.
 
 ## Answers to the brief
 
@@ -29,7 +29,7 @@ make dev     # API on :8000 (with its worker) and the web app on http://localhos
 | The business problem | Requests describe solutions; the unit of value is the need. Intake is where duplicates and lost demand start, so that's where AI goes. | [Problem](#the-problem-and-why-intake) |
 | Who benefits | PMs, requesters, CS and sales, product leaders, each with a concrete before and after. | [Who benefits](#who-benefits) |
 | Why AI | Telling needs apart is about meaning, not words: Haiku beats the embedding baseline by 20 points on test, and keeps genuinely new needs new 100% of the time against 25%. | [AI design](#ai-design) |
-| How AI changes the workflow | The PM no longer reads every request; the workflow links, suggests or opens needs, and the PM handles exceptions and an audit sample. | [Before and after](#the-workflow-before-and-after) |
+| How AI changes the workflow | The PM no longer reads every request; the workflow links, suggests or opens needs, and the PM handles exceptions and an audit sample. Before deciding, "Brief me" gives a one-page brief whose quotes and money figures are checked against the data. | [Before and after](#the-workflow-before-and-after) |
 | The architecture and why | Workflows where the path is known, one bounded agent where it isn't: intake and the decision brief are fixed workflows, and the only agent finds related needs with 3 read-only tools and at most 8 calls, its findings checked in code. | [Architecture](#architecture), [ADR 0001](docs/adr/0001-workflow-first-one-bounded-agent.md), [ADR 0012](docs/adr/0012-decision-briefs-bounded-agent-manual-loop.md) |
 | Where human judgment stays | Status decisions, gray-zone links, claim disputes, the audit sample, undo, and approving every message to a customer. | [Human judgment](#where-human-judgment-stays) |
 | How to measure impact | M1 to M4, computed from the rows the app writes, shown on AI Ops; M4 has a Wilson interval against a 3% target. | [Success metrics](#success-metrics) |
@@ -48,7 +48,7 @@ Brightboard (a fictional B2B analytics SaaS) gets requests from customers, prosp
 | PM | Reads every request, searches by keyword, merges by hand | Reviews the gray zone, disputes, failures and a 10% audit sample; ranks with an explained score |
 | Requester (customer, CS, sales, internal) | Submits into a void; duplicates are invisible | Sees matching needs while typing, backs one in a click, follows their request, gets a personal update when it's decided |
 | CS and sales | Can't see which accounts want what | Sees accounts, ARR and renewals behind each need, and a CS note per account when a decision lands |
-| Product leader | Vote counts or opinions | Demand, strategic fit and urgency shown separately; popular kept apart from strategic |
+| Product leader | Vote counts or opinions | Demand, strategic fit and urgency shown separately; popular kept apart from strategic; a decision brief per need with verified evidence and related needs |
 
 ## The workflow before and after
 
@@ -58,6 +58,7 @@ Brightboard (a fictional B2B analytics SaaS) gets requests from customers, prosp
 | Dedupe | The PM spots duplicates from memory | Retrieval finds candidates, the model judges same need or not, code routes: auto-link, suggest, or new need (AI and code) |
 | Understand | The PM rereads the thread | The extraction stores problem, persona, job to be done, area and severity, with confidence and rationale (AI) |
 | Weigh | Vote count | Demand from ARR and segments, urgency from severity and renewals (code); strategic fit per goal (AI, rated 0 to 3; code weighs it) |
+| Frame | The PM writes a one-pager by hand, if at all | "Brief me": facts gathered in code, related needs found by a bounded read-only agent, one Sonnet call, every quote, fact key and money figure checked in code (AI, agent and code) |
 | Decide | Spreadsheet triage | The PM works an exception inbox and sets each need's status with a reason (human) |
 | Communicate | Ad hoc, often never | AI drafts a personal update per supporter and a CS note per account; code flags promises; the PM approves each one (AI and human) |
 
@@ -78,8 +79,12 @@ flowchart LR
     direction TB
     RD["redact"] --> EM["embed (local bge-small)"] --> RT["retrieve top 5"] --> EX["extract need<br/>(Haiku 4.5)"] --> AD["adjudicate<br/>(Haiku 4.5)"] --> RO["route in code<br/>(score, thresholds)"]
   end
+  subgraph BRIEF["Decision brief (app/ai/brief.py)"]
+    direction TB
+    FA["facts in code"] --> AG["related-needs agent (Haiku)<br/>3 read-only tools, at most 8 calls"] --> BC["one brief call (Sonnet)"] --> CK["checks in code"]
+  end
   GW["Gateway: the only module that calls a model;<br/>structured output, validation, retries, ai_runs cost ledger"]
-  DB[("SQLite (WAL)<br/>requests, needs, suggestions,<br/>link events, ai_runs, updates")]
+  DB[("SQLite (WAL)<br/>requests, needs, suggestions,<br/>link events, ai_runs, updates, briefs")]
   CFG["config/*.yaml<br/>thresholds, weights, goals"]
   R --> PORTAL
   R -->|"submit, support,<br/>similar, my requests"| PM
@@ -87,6 +92,9 @@ flowchart LR
   PORTAL --> DB
   PM --> DB
   W --> AI
+  W --> BRIEF
+  BRIEF --> GW
+  BRIEF --> DB
   AI --> GW --> CL["Anthropic API<br/>(offline: baseline)"]
   AI --> DB
   CFG --> AI
@@ -99,14 +107,20 @@ flowchart LR
 
 ## AI design
 
-**A workflow, not an agent.** Intake is the same steps for every request, so a model choosing the path would add cost, latency and variance, and make each step impossible to evaluate on its own ([ADR 0001](docs/adr/0001-workflow-first-one-bounded-agent.md)). The one place an agent fits is finding what else in the backlog a need overlaps with, blocks or depends on, because what to read next depends on what the last search found. That agent feeds the decision brief (spec F6, [ADR 0012](docs/adr/0012-decision-briefs-bounded-agent-manual-loop.md)): a manual loop on the plain SDK, three strict read-only tools, at most 8 tool calls and 90 seconds, every finding cited and verbatim. The brief itself is a workflow: facts gathered in code, one Sonnet call, and every quote and money figure checked in code (live SSO example: [docs/examples/brief-sso.md](docs/examples/brief-sso.md), 0 of 28 claims flagged, $0.043). The other model steps are single calls in code-orchestrated workflows:
+**Workflows, and one bounded agent.** Intake is the same steps for every request, so a model choosing the path would add cost, latency and variance, and make each step impossible to evaluate on its own ([ADR 0001](docs/adr/0001-workflow-first-one-bounded-agent.md)). The one place an agent fits is finding what else in the backlog a need overlaps with, blocks or depends on, because what to read next depends on what the last search found. That agent feeds the decision brief (spec F6, [ADR 0012](docs/adr/0012-decision-briefs-bounded-agent-manual-loop.md)):
+- **The loop:** a manual loop on the plain SDK. It was chosen over the SDK tool runner, the Claude Agent SDK and Managed Agents because every turn has to go through the gateway and be testable with FakeLLM.
+- **The bounds:** three strict read-only tools (`search_needs`, `get_need`, `get_trend`), at most 8 tool calls (then one answer-only turn, flagged incomplete) and 90 seconds. Every finding must cite a request of the related need with a verbatim quote.
+- **The brief itself is a workflow:** facts gathered in code, one Sonnet 5.5 call with a cached system prompt, and every quote, fact key, money figure and related need checked in code. One repair round follows; whatever still fails is shown flagged, and invented figures are removed.
+- **Live SSO example:** [docs/examples/brief-sso.md](docs/examples/brief-sso.md), with 0 of 28 claims flagged, for $0.043.
+
+The other model steps are single calls in code-orchestrated workflows:
 - **Intake:** extract, then adjudicate against retrieved candidates.
 - **Strategic fit:** rate each goal 0 to 3 ([ADR 0009](docs/adr/0009-weighted-priority-computed-on-read.md)).
 - **Stakeholder updates:** draft messages ([ADR 0010](docs/adr/0010-stakeholder-updates-ai-drafts-code-checks-pm-approves.md)).
 
 **The model judges, code decides.** Models return labels, extracted fields, ratings and drafts; thresholds, routing scores, priorities and permissions are code and config. Every call goes through one gateway: structured output validated with Pydantic, user text inside XML tags as data, emails and phones redacted, one repair retry, refusals as failures, and a row in `ai_runs` with tokens, cost, latency and outcome ([ADR 0003](docs/adr/0003-model-judges-code-computes.md), [ADR 0008](docs/adr/0008-model-boundary-details.md)).
 
-**Models chosen by eval, against a no-LLM baseline** ([REPORT §3](evals/REPORT.md#3-model-strategy-comparison-2026-10-07), [ADR 0006](docs/adr/0006-per-step-model-choice-by-eval.md)). The frozen test set has 150 cases, 17 of them written by hand as hard cases; dev is a replay of the 62 seed requests.
+**Intake models chosen by eval, against a no-LLM baseline** ([REPORT §3](evals/REPORT.md#3-model-strategy-comparison-2026-10-07), [ADR 0006](docs/adr/0006-per-step-model-choice-by-eval.md)). The brief's two models (Haiku for the agent, Sonnet for the brief) were chosen by judgment, not by eval; their prompts have no eval yet ([ADR 0012](docs/adr/0012-decision-briefs-bounded-agent-manual-loop.md)). The frozen test set has 150 cases, 17 of them written by hand as hard cases; dev is a replay of the 62 seed requests.
 
 | On the frozen test set (n = 150) | Accuracy | Duplicate precision | Duplicate recall | New needs kept new | $ per request |
 |---|---|---|---|---|---|
@@ -118,6 +132,7 @@ flowchart LR
 - **Why Sonnet's perfect precision lost.** It never false-merged (0 of 87 links), but paid with recall of about 70%. When the requester's persona differed from the need's, it labelled true duplicates `related`, and it sent 63 of 150 requests to new needs where 25 belong. With this prompt it doesn't beat the baseline on accuracy on either split; it wins only on false merges. Under the project's rule that an LLM step must beat the baseline to earn its cost, Sonnet didn't, and Haiku did.
 - **Why the cascade wasn't built.** A cascade would send Haiku's gray zone to Sonnet. On that band, Sonnet is the weaker judge: 72% against Haiku's 96% on dev, and 72% against 97% on test. The simulated cascade reached 72.6% on dev, below Haiku alone (82.3%), at a cost in between.
 - **Spend.** The whole model comparison cost **$5.88** for 971 calls. That includes $0.91 to re-run dev after a review found a label leak in the replay (see risks). Every reply is cached, so the report regenerates for free.
+- **Live validation.** All 7 golden paths, "Brief me" and an approved stakeholder update included, passed against the real API. The validation cost **$0.18** for 32 calls across three runs (the final golden-path run alone: 14 calls, $0.069). `ai_runs` recorded real tokens, cost and latency, and AI Ops showed them ([REPORT §6](evals/REPORT.md#6-live-validation-2026-10-07-not-an-eval)).
 
 ## Where human judgment stays
 
@@ -128,6 +143,7 @@ flowchart LR
 | A requester's "this is my need" | Checked by the workflow; disputes go to the PM | Requesters over-claim; an unchecked claim is a merge |
 | A need's status (planned, declined…) | The PM, with a reason | It's a product decision |
 | Messages to customers | AI drafts, code flags promises, the PM edits and approves each one | They're external commitments |
+| A decision brief | AI frames it (facts from code, quotes and money figures checked); the PM reads it and decides | The brief informs the decision; it never makes it |
 | Thresholds, weights, goals | The PM in config, after an eval | The model judges, code decides |
 
 ## Guardrails
@@ -136,6 +152,7 @@ flowchart LR
 - **Reversible by design.** Every link can be undone in one click. History is append-only (`linkevent`), and nothing the AI produced is deleted.
 - **Prompt injection is contained.** User text is passed as data inside tags, the intake path has no tools that write, quotes are verified in code, and a request that tries to give orders can at worst cause a wrong suggestion that a human reviews.
 - **Stakeholder messages can't over-promise.** A code check flags dates, timing and "we will ship" unless the PM set a date. Approval re-checks the text and refuses while anything is flagged.
+- **The agent is bounded and read-only.** Three strict tools that only read, unknown tools rejected unrun, at most 8 calls and 90 seconds. Its findings are checked in code before the brief may cite them, and the brief survives the agent failing.
 - **Failure is visible, not blocking.** Provider errors retry with backoff, then go to Needs review with the reason. A daily model-spend ceiling makes the worker wait instead of spending.
 - **Production hardening.** Rate limits, body caps, CORS, request IDs into `ai_runs`, health and readiness endpoints, and logs scrubbed of PII ([details](#production-path)).
 
@@ -154,7 +171,8 @@ All four, plus acceptance rate, needs-review rate, cost, latency and queue healt
 
 - **Free, in CI.** `make eval-offline` runs the embedding baseline, and `make eval-gate` checks it against committed floors.
 - **Paid, and asks first.** `make eval` runs the model strategies on dev and test, with every reply cached.
-- **Results:** [evals/REPORT.md](evals/REPORT.md). §1 is the baseline, §3 the strategy comparison, §4 the decisions.
+- **Results:** [evals/REPORT.md](evals/REPORT.md). §1 is the baseline, §3 the strategy comparison, §4 the decisions, §6 the live validation.
+- **Not evaluated yet:** the brief's two prompts (`related_needs_v1`, `decision_brief_v1`) and `stakeholder_update_v1`. Code checks and PM review are their safety net (production path #9).
 - **The datasets:**
   - the test set is frozen: SHA-256 recorded, and the runner refuses to run otherwise;
   - the hard cases were written by hand;

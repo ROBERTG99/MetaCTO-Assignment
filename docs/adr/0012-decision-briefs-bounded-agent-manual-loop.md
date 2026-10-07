@@ -67,6 +67,7 @@ Four ways to run the agent loop were compared, on control over approvals and log
   - **Cost and latency:** $0.0427 for 4 calls in about 37 seconds.
   - **Cache:** the brief call wrote 2,621 tokens to the cache (the system prompt and the output schema). It read 0, because the cache only pays off on a second brief within 5 minutes.
   - It was generated before the reviewer's fixes (tool errors, unescaped JSON in tool results, the request cap, the repair fallback, trace-based call listing, the brief timeout). None of them changes how this brief was verified: it had 5 requests, no non-ASCII quotes and no failing claims.
+- **The live golden-path run** (`make e2e-live`, [REPORT §6](../../evals/REPORT.md#6-live-validation-2026-10-07-not-an-eval)): "Brief me" on SSO passed live with 5 of 8 tool calls, 0 of 26 claims flagged, $0.0403. AI Ops showed its tokens, cost and latency.
 - **No eval yet for `related_needs_v1` or `decision_brief_v1`** (CLAUDE.md rule 7 is not met). The comparison an eval would need to beat is the offline baseline: the nearest need for the agent, the template for the brief. Until then, the safety net is the verification in code and a PM reading the brief.
 - **What the checks don't cover:**
   - Counts in prose ("five accounts") aren't checked; only money is.

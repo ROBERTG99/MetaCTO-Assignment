@@ -353,3 +353,53 @@ Robert's decisions after reading §3. No eval was run for this section: everythi
 - **Dev has no hard cases,** so a threshold chosen on dev isn't stress-tested.
 - The README says what would fix each one.
 
+
+## 5. Strategic fit agreement
+
+Reserved: the 11 cases in `evals/datasets/strategic_fit.jsonl` wait for Robert's labels, and the paid run (`make eval STEP=fit`, about 28 calls and $0.07) waits for his go.
+
+## 6. Live validation (2026-10-07). Not an eval.
+
+**Purpose.** Before the last steps, the product was run once against the real API. The goal was to check that what works offline also works live, and that `ai_runs` records real tokens, cost and latency that AI Ops then shows. It is a smoke test of the whole system, not a measurement of quality: one run, no labels.
+
+**How.**
+- `make e2e-live`: the 7 Playwright golden paths with `AI_MODE=live` against a fresh seeded database. Haiku 4.5 ran intake, claims, strategic fit, stakeholder drafts and the related-needs agent; Sonnet 5.5 ran the brief.
+- `make brief-live`: the SSO brief written to [docs/examples/brief-sso.md](../docs/examples/brief-sso.md).
+- CI stays offline: `E2E_AI_MODE` defaults to offline, and only the `e2e-live` target sets it.
+
+**Result.** 7 of 7 golden paths passed live. GP7 was written mode-aware before the first live run; GP2 and GP3 were made mode-aware after it (below).
+
+**Source of the numbers.** They come from read-only queries of `backend/data/e2e.db`, run right after each run. The live calls are the rows with a trace ID; the seed's recorded eval rows carry none.
+- **Not re-derivable for the golden-path runs:** that database was shared with `make e2e`, and an offline run afterwards reseeded it, so these figures are recorded here and can't be re-derived from it.
+- **Since then:** `make e2e-live` writes to its own database (`data/e2e-live.db`).
+- **Still verifiable:** the brief-live rows are in `backend/data/live.db`.
+
+"Input tokens" is uncached input as the API reports it. AI Ops' "Tokens in" adds cache writes, so it shows 4,504 for the brief.
+
+| Step | Model | Calls | OK | Input tokens | Output tokens | Cache write / read | Cost | Mean latency |
+|---|---|---|---|---|---|---|---|---|
+| extract | Haiku 4.5 | 4 | 3 | 3,915 | 656 | 0 / 0 | $0.0072 | 4.1 s |
+| adjudicate | Haiku 4.5 | 3 | 3 | 4,423 | 1,390 | 0 / 0 | $0.0114 | 5.9 s |
+| strategic_fit | Haiku 4.5 | 2 | 2 | 2,777 | 441 | 0 / 0 | $0.0050 | 4.2 s |
+| stakeholder_update | Haiku 4.5 | 1 | 1 | 1,408 | 709 | 0 / 0 | $0.0050 | 8.8 s |
+| related_needs (agent) | Haiku 4.5 | 3 | 3 | 9,358 | 350 | 0 / 0 | $0.0111 | 3.1 s |
+| decision_brief | Sonnet 5.5 | 1 | 1 | 1,883 | 1,885 | 2,621 / 0 | $0.0292 | 17.9 s |
+| **Total** | | **14** | **13** | **23,764** | **5,431** | **2,621 / 0** | **$0.0688** | |
+
+Row costs are rounded; the exact total is $0.06878.
+
+- **The one failed call is by design:** GP6's simulated provider failure, which happens before any network call. It was recorded at $0 and sent to Needs review with its reason.
+- **Brief me (GP7).** The agent used 5 of 8 tool calls in 3 turns and finished on its own. The brief came from one Sonnet call, with 0 of 26 claims flagged and no repair round. It cost $0.0403 and took about 28 seconds end to end.
+- **Stakeholder update (GP5).** 12 drafts were written in one Haiku call, and the commitment check flagged 5 of them. The PM fixed and approved the 7 personal updates, and the requester saw hers.
+- **AI Ops (GP7's last step).** The page showed the brief's row with real tokens, cost and latency. AI Ops had no token columns before this run; they were added (`/metrics` runs now carry input, output and cache tokens, tested in `api/test_workspace_api.py`).
+- **Prompt cache.** The brief's system prompt and output schema were written to the cache (2,621 tokens), so it is above Sonnet 5.5's minimum. No call read it, because each run made one brief call. A second brief within 5 minutes would read it at a tenth of the input price; that read wasn't demonstrated.
+
+**What differed live, and what changed.** No product code broke only in live mode. Two specs and one view had assumed offline:
+1. **GP3 (triage).** The spec's "gray zone" text is gray for the embedding baseline (similarity 0.735). Haiku judged it `same_need` with the SSO need (routing score 0.885 in the first run, 0.785 in the second) and auto-linked it, which is the correct live outcome. The spec now accepts a suggestion or an auto-link in live mode, as long as the request lands on the SSO need with a Haiku badge.
+2. **GP2 (submit and track).** The new need's source is Haiku, not the offline baseline; the assertion is now mode-aware.
+3. **AI Ops** had no tokens per step (see above).
+
+**Cost of the live validation:** **$0.1827** in 32 calls across three runs:
+- the first golden-path run, $0.0712 for 14 calls, with the two spec failures above;
+- the final run, $0.0688 for 14 calls;
+- `make brief-live`, $0.0427 for 4 calls.

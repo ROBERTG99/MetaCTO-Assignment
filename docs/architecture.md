@@ -39,7 +39,7 @@ flowchart LR
 ```
 
 - **One process.** The API, the worker loop and SQLite all run in one process (ADR 0005, ADR 0007). The worker code doesn't depend on the web layer, so it can later run as its own process.
-- **Gateway.** It exposes one method per model step: `extract`, `adjudicate`, `rate_fit` and `draft_updates`. It redacts emails and phone numbers in every input before any provider call (rule 9). Clients are `AnthropicClient`, `OfflineClient` (heuristics, the baseline, template drafts), `FakeLLM` in tests and `FaultInjectingClient` (only with `APP_ENV=test`, for the e2e failure path) (ADR 0006, ADR 0008). Prompts live in `app/ai/prompts/<step>_v<N>.md`.
+- **Gateway.** It exposes one method per model step: `extract`, `adjudicate`, `rate_fit`, `draft_updates`, `related_needs_turn` (one agent turn with tools) and `decision_brief`. It redacts emails and phone numbers in every input, tool results included, before any provider call (rule 9). Clients are `AnthropicClient` (which also runs agent turns: the `ToolClient` protocol), `OfflineClient` (heuristics, the baselines, template drafts and briefs), `FakeLLM` in tests and `FaultInjectingClient` (only with `APP_ENV=test`, for the e2e failure path) (ADR 0006, ADR 0008). Prompts live in `app/ai/prompts/<step>_v<N>.md`.
 - **Vectors.** They aren't stored: at startup the index embeds every member request and need with the local model into one numpy matrix, and updates it on write. Search is brute-force cosine (ADR 0005).
 
 ## Intake sequence (through the database queue)
@@ -91,15 +91,15 @@ sequenceDiagram
   Note over W,DB: On startup, every processing row goes back to pending (lease 0: one process).
 ```
 
-## Decision brief with the overlap agent
+## Decision brief with the related-needs agent
 
-Built in #24 ([ADR 0012](adr/0012-decision-briefs-bounded-agent-manual-loop.md)); code in `app/ai/brief.py`, `app/services/briefs.py`.
+Built in #25 ([ADR 0012](adr/0012-decision-briefs-bounded-agent-manual-loop.md)); code in `app/ai/brief.py`, `app/services/briefs.py`.
 
 ```mermaid
 flowchart TD
   A["PM: Brief me (POST /needs/N/brief)"] --> B["brief row queued (pending); 202"]
   B --> C["Worker: gather facts in code<br/>need, requests, accounts, ARR, pipeline,<br/>renewals, D/U/S, goals"]
-  C --> E["Overlap agent: manual loop<br/>gateway.related_needs_turn per turn (Haiku)<br/>strict read-only tools: search_needs, get_need, get_trend<br/>cap 8 tool calls, 90 s; other tools rejected unrun"]
+  C --> E["Related-needs agent: manual loop<br/>gateway.related_needs_turn per turn (Haiku)<br/>strict read-only tools: search_needs, get_need, get_trend<br/>cap 8 tool calls, 90 s; other tools rejected unrun"]
   E --> F["Verify findings in code:<br/>need live and not itself, request belongs to it,<br/>quote verbatim; failures flagged, not passed on"]
   E -- "fails or times out" --> G
   F --> G["One call: gateway.decision_brief (Sonnet, medium,<br/>cached system prompt); facts as keyed values,<br/>requests and verified findings inside XML tags"]

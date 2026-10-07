@@ -2,7 +2,7 @@
 
 The brief's inputs are known in advance, so the brief itself is a workflow: gather the facts in code, make one
 call on SMART_MODEL, verify the result in code. Only "what else in the backlog does this need overlap with,
-block or depend on?" has a path that isn't known in advance; that is the overlap agent's one job. The agent is
+block or depend on?" has a path that isn't known in advance; that is the related-needs agent's one job. The agent is
 bounded (a cap of 8 tool calls and a wall-clock limit), read-only (three strict tools; anything else is
 rejected unrun) and verifiable (every finding cites a request and a verbatim quote, checked here).
 """
@@ -263,7 +263,7 @@ def run_agent(
                     status, note = "error", str(exc).splitlines()[0][:200]
                     text = f"Bad arguments: {note}"
                 except Exception as exc:  # a failing tool is a step error, never a lost brief
-                    log.exception("overlap agent tool %s failed", c.name)
+                    log.exception("related-needs agent tool %s failed", c.name)
                     status, note = "error", f"{type(exc).__name__}: {exc}".splitlines()[0][:200]
                     text = f"The tool failed: {note}"
             ms = int((time.perf_counter() - started) * 1000)

@@ -1,4 +1,4 @@
-.PHONY: demo brief-live test-web setup setup-backend setup-web audit eval-gate dev dev-api dev-web test lint typecheck typecheck-web check check-hooks e2e gen-api seed seed-raw seed-live openapi rank eval-offline eval-tune eval eval-compare eval-fit-report snapshot
+.PHONY: demo brief-live e2e-live test-web setup setup-backend setup-web audit eval-gate dev dev-api dev-web test lint typecheck typecheck-web check check-hooks e2e gen-api seed seed-raw seed-live openapi rank eval-offline eval-tune eval eval-compare eval-fit-report snapshot
 
 BACKEND := cd backend &&
 
@@ -72,7 +72,8 @@ REFS ?= R22,R13,R07
 seed-live:
 	$(BACKEND) AI_MODE=live HF_HUB_OFFLINE=1 uv run python -m seed.live --refs $(REFS)
 
-# Paid: one live decision brief for the need whose title contains NEED, written to OUT (settings ask first).
+# Paid: one live decision brief for the need whose title contains NEED, written to OUT. Needs Robert's go
+# (CLAUDE.md); .claude/settings.json does not ask for it yet.
 # Uses its own database (data/live.db), reset to the seed. Typically 3-9 agent turns on Haiku and 1-2 brief calls on Sonnet (worst case: 18 Haiku and 6 Sonnet calls, with every retry).
 NEED ?= SAML SSO with Okta
 OUT ?= ../docs/examples/brief-sso.md
@@ -87,6 +88,12 @@ rank:
 # worker, and the web app on :5174; Playwright starts and stops both. No API key, no network.
 e2e:
 	$(WEB) npx playwright test
+
+# Paid: the same golden paths against the real API (AI_MODE=live). Needs Robert's go (CLAUDE.md); .claude/settings.json
+# does not ask for it yet. It uses its own database (backend/data/e2e-live.db), so `make e2e` never overwrites
+# the live ai_runs. About 14 model calls and $0.07 per run (REPORT §6).
+e2e-live:
+	$(WEB) E2E_AI_MODE=live npx playwright test --timeout=180000
 
 # Write backend/openapi.json without starting the server
 openapi:

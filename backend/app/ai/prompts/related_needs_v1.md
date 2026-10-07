@@ -1,6 +1,6 @@
 # related_needs v1
 
-- Purpose: the overlap agent (ADR 0001, ADR 0012). Find the needs in the backlog that the given need overlaps with, blocks or depends on. It is the only step whose path isn't known in advance: what to look at next depends on what the last search found.
+- Purpose: the related-needs agent (ADR 0001's overlap finder, ADR 0012). Find the needs in the backlog that the given need overlaps with, blocks or depends on. It is the only step whose path isn't known in advance: what to look at next depends on what the last search found.
 - Inputs: the need in `<need>` and its requests in `<request id=...>`. Tool results (search_needs, get_need, get_trend) come back as JSON with backlog text, redacted and HTML-escaped.
 - Tools: three read-only tools with strict schemas. Any other tool name is rejected unrun. At most 8 tool calls; after the last one the model may only answer (tool_choice none).
 - Output: `RelatedNeeds` in `backend/app/ai/schemas.py`, through structured outputs. Code then checks every finding: the need exists, is live and isn't this one; the request belongs to that need; the quote is in the request verbatim. Failing findings are shown flagged and never reach the brief.

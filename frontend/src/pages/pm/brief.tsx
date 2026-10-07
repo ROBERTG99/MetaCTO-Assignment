@@ -1,4 +1,4 @@
-// The decision brief (spec F6, ADR 0012). The PM asks; the worker runs the bounded overlap agent and one brief
+// The decision brief (spec F6, ADR 0012). The PM asks; the worker runs the bounded related-needs agent and one brief
 // call; code verifies every claim. Flagged claims stay visible and marked, never hidden, and "How this brief was
 // built" shows each agent step and each model call, so the PM can see exactly where every line came from.
 import { AlertTriangle, CheckCircle2, ChevronDown, Loader2 } from 'lucide-react'
@@ -233,7 +233,7 @@ function HowBuilt({ id, brief, content }: { id: string; brief: BriefOut; content
     <section id={id} aria-label="How this brief was built" className="space-y-4 rounded-lg border p-3">
       <div className="space-y-1 text-sm">
         <p>
-          <span className="font-medium">1. Overlap agent</span> ({sourceLabel(r.model)}, prompt {r.prompt_version}): {r.tool_calls} of {r.cap} tool calls,
+          <span className="font-medium">1. Related-needs agent</span> ({sourceLabel(r.model)}, prompt {r.prompt_version}): {r.tool_calls} of {r.cap} tool calls,
           read-only tools only. {r.status === 'complete' ? 'Finished on its own.' : r.reason}
         </p>
         <Table aria-label="Agent steps">

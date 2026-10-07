@@ -641,7 +641,7 @@
           "needs"
         ],
         "summary": "Ask for a decision brief (the worker builds it; spends model calls in live mode)",
-        "description": "202 with the queued brief. A brief already waiting for this need is returned instead of a second one. The overlap agent (read-only, at most 8 tool calls) runs first; the brief is verified in code.",
+        "description": "202 with the queued brief. A brief already waiting for this need is returned instead of a second one. The related-needs agent (read-only, at most 8 tool calls) runs first; the brief is verified in code.",
         "operationId": "ask_for_brief_needs__need_id__brief_post",
         "parameters": [
           {
@@ -5153,6 +5153,26 @@
           "p95_ms": {
             "type": "integer",
             "title": "P95 Ms"
+          },
+          "input_tokens": {
+            "type": "integer",
+            "title": "Input Tokens",
+            "default": 0
+          },
+          "output_tokens": {
+            "type": "integer",
+            "title": "Output Tokens",
+            "default": 0
+          },
+          "cache_read_tokens": {
+            "type": "integer",
+            "title": "Cache Read Tokens",
+            "default": 0
+          },
+          "cache_write_tokens": {
+            "type": "integer",
+            "title": "Cache Write Tokens",
+            "default": 0
           }
         },
         "type": "object",

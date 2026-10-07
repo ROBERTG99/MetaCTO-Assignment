@@ -63,7 +63,10 @@ def _runs(session: Session) -> tuple[list[dict[str, Any]], int, float]:
         lat = [r.latency_ms for r in rs]
         out.append({"step": step, "model": model, "prompt_version": version, "calls": len(rs), "ok": ok,
                     "failure_rate": (len(rs) - ok) / len(rs), "cost_usd": round(cost, 6),
-                    "cost_per_call": cost / len(rs), "p50_ms": _pct(lat, 0.5), "p95_ms": _pct(lat, 0.95)})  # fmt: skip
+                    "cost_per_call": cost / len(rs), "p50_ms": _pct(lat, 0.5), "p95_ms": _pct(lat, 0.95),
+                    "input_tokens": sum(r.input_tokens for r in rs), "output_tokens": sum(r.output_tokens for r in rs),
+                    "cache_read_tokens": sum(r.cache_read_tokens for r in rs),
+                    "cache_write_tokens": sum(r.cache_write_tokens for r in rs)})  # fmt: skip
     return out, len(runs), sum(r.cost_usd for r in runs)
 
 

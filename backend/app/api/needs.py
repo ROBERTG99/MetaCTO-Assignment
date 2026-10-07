@@ -155,7 +155,7 @@ def redraft(
     responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 422: {"model": ErrorResponse}},
     summary="Ask for a decision brief (the worker builds it; spends model calls in live mode)",
     description="202 with the queued brief. A brief already waiting for this need is returned instead of a "
-    "second one. The overlap agent (read-only, at most 8 tool calls) runs first; the brief is verified in code.",
+    "second one. The related-needs agent (read-only, at most 8 tool calls) runs first; the brief is verified in code.",
 )
 def ask_for_brief(
     body: Decision, need_id: int = NeedId, session: Session = Depends(get_session)

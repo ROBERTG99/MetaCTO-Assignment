@@ -347,3 +347,26 @@ def test_ai_ops_reports_queue_depth(client: TestClient, world: dict[str, Any], m
     make.request(world["rosa"], None, "waiting")
     q = client.get("/metrics").json()["queue"]
     assert (q["pending"], q["stuck"], q["needs_review"]) == (1, 0, 0)
+
+
+def test_ai_ops_reports_tokens_per_step_including_cache_reads(client: TestClient, db: Session) -> None:
+    _run(
+        db,
+        "decision_brief",
+        model="claude-sonnet-5-5",
+        input_tokens=2000,
+        output_tokens=1900,
+        cache_write_tokens=2600,
+    )
+    _run(
+        db,
+        "decision_brief",
+        model="claude-sonnet-5-5",
+        input_tokens=2100,
+        output_tokens=1800,
+        cache_read_tokens=2600,
+    )
+    [row] = [r for r in client.get("/metrics").json()["runs"] if r["step"] == "decision_brief"]
+    assert (row["input_tokens"], row["output_tokens"], row["cache_read_tokens"], row["cache_write_tokens"]) == (
+        4100, 3700, 2600, 2600,
+    )  # fmt: skip

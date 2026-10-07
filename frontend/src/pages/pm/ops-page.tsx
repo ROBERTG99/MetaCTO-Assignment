@@ -185,6 +185,8 @@ function Body({ m }: { m: Schemas['OpsMetrics'] }) {
                   <TableHead>Prompt</TableHead>
                   <TableHead className="text-right">Calls</TableHead>
                   <TableHead className="text-right">Failure rate</TableHead>
+                  <TableHead className="text-right">Tokens in / out</TableHead>
+                  <TableHead className="text-right">Cache read</TableHead>
                   <TableHead className="text-right">Cost</TableHead>
                   <TableHead className="text-right">Cost per call</TableHead>
                   <TableHead className="text-right">p50</TableHead>
@@ -201,6 +203,10 @@ function Body({ m }: { m: Schemas['OpsMetrics'] }) {
                     <TableCell className="text-right tabular-nums">
                       {percent(r.failure_rate)} <span className="text-muted-foreground">({r.calls - r.ok} of {r.calls})</span>
                     </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {(r.input_tokens + (r.cache_write_tokens ?? 0)).toLocaleString()} / {r.output_tokens.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{(r.cache_read_tokens ?? 0).toLocaleString()}</TableCell>
                     <TableCell className="text-right tabular-nums">{cost(r.cost_usd)}</TableCell>
                     <TableCell className="text-right tabular-nums">{cost(r.cost_per_call)}</TableCell>
                     <TableCell className="text-right tabular-nums">{Math.round(r.p50_ms)} ms</TableCell>

@@ -160,7 +160,7 @@ def to_markdown(out: dict[str, Any], need_title: str) -> str:
     lines += [f"- {q}{flag(f'open_questions[{i}]')}" for i, q in enumerate(b["open_questions"])]
     lines += [
         "", "## How this brief was built", "",
-        f"1. **Overlap agent** ({rel['model']}, prompt {rel['prompt_version']}): {rel['tool_calls']} of {rel['cap']} "
+        f"1. **Related-needs agent** ({rel['model']}, prompt {rel['prompt_version']}): {rel['tool_calls']} of {rel['cap']} "
         f"tool calls, read-only tools only; {rel['status']}{': ' + rel['reason'] if rel['reason'] else ''}.",
         "", "| # | Tool | Arguments | Result | Size | Latency |", "|---|---|---|---|---|---|",
     ]  # fmt: skip

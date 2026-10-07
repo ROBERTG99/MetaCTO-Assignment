@@ -56,7 +56,7 @@ def build_deps(engine: Engine, config: Path = CONFIG) -> Deps:
         ),
         "strategic_fit": StepConfig(model[priorities.fit_model], 1500),
         "stakeholder_update": StepConfig(settings.fast_model if live else "offline-baseline", 3000),
-        # the overlap agent navigates search results; its findings are checked in code (ADR 0012)
+        # the related-needs agent navigates search results; its findings are checked in code (ADR 0012)
         "related_needs": StepConfig(settings.fast_model if live else "offline-baseline", 2000),
         # the brief's system prompt is static and above Sonnet 5.5's minimum cacheable prefix, so it is cached
         "decision_brief": StepConfig(

@@ -518,7 +518,7 @@ class Gateway:
         allow_tools: bool,
         need_id: int | None = None,
     ) -> tuple[Turn, int]:
-        """One turn of the overlap agent: recorded, redacted, refusals and limits mapped like any call.
+        """One turn of the related-needs agent: recorded, redacted, refusals and limits mapped like any call.
 
         The first message (the need) is rendered here; transcript holds the turns since. Tool results carry
         backlog text, so they are redacted and escaped like any input; assistant content goes back unchanged.
@@ -1120,7 +1120,7 @@ class OfflineClient:
         allow_tools: bool,
         inputs: dict[str, Any],
     ) -> Turn:
-        """The offline baseline for the overlap agent: search once with the need's text, read the nearest need
+        """The offline baseline for the related-needs agent: search once with the need's text, read the nearest need
         above the similarity floor, report it as an overlap. Deterministic, and labelled as the baseline."""
         if step != "related_needs":
             raise TerminalError(f"offline mode has no tool loop for {step}")

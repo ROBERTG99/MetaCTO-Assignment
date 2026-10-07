@@ -2,6 +2,8 @@
 // auto-link, undo an auto-link.
 import { expect, test } from '@playwright/test'
 
+import { AI_MODE } from '../playwright.config.ts'
+
 import { actAsPM, API, requesterId, toasts } from './support.ts'
 
 test('the PM accepts a suggestion, checks an audited auto-link and undoes an auto-link', async ({ page, request }) => {
@@ -21,7 +23,35 @@ test('the PM accepts a suggestion, checks an audited auto-link and undoes an aut
   await page.getByRole('link', { name: 'Triage inbox' }).click()
   await expect(page.getByRole('heading', { name: 'Triage inbox' })).toBeVisible()
 
-  await test.step('accept a suggestion', async () => {
+  // Live, Haiku judges the same text: it may be same_need above T_auto (auto-linked, labelled, undoable) or a
+  // gray-zone suggestion. Either way it must land on the SSO need, never on another one.
+  if (AI_MODE === 'live') {
+    await test.step('the live adjudicator routes the Okta request to SSO', async () => {
+      const text = 'Sign in with Okta would help our team'
+      const femi = await requesterId(request, 'Femi Adeyemi')
+      await expect
+        .poll(async () => {
+          const mine = (await (await request.get(`${API}/requests?requester_id=${femi}`)).json()) as { title: string; status: string }[]
+          return mine.find((r) => r.title === 'Okta')?.status
+        }, { timeout: 60_000 })
+        .toBe('processed') // the worker has routed it; now see where it went
+      const suggestion = page.getByRole('tabpanel').getByRole('article').filter({ hasText: text })
+      await page.getByRole('tab', { name: /Suggestions/ }).click()
+      const suggested = await suggestion.waitFor({ timeout: 8_000 }).then(() => true, () => false) // the inbox polls every 3 s
+      if (suggested) {
+        await expect(suggestion).toContainText('SSO')
+        await expect(suggestion.getByTestId('routing-badge')).toContainText('Haiku')
+        await suggestion.getByRole('button', { name: 'Accept' }).click()
+        await expect(toasts(page).getByText(/^Linked to/)).toBeVisible()
+      } else {
+        await page.getByRole('tab', { name: /Auto-linked/ }).click()
+        const linked = page.getByRole('tabpanel').getByRole('article').filter({ hasText: text })
+        await expect(linked).toBeVisible({ timeout: 30_000 })
+        await expect(linked).toContainText('SSO')
+        await expect(linked.getByTestId('routing-badge')).toContainText('Haiku')
+      }
+    })
+  } else await test.step('accept a suggestion', async () => {
     await page.getByRole('tab', { name: /Suggestions/ }).click()
     const item = page.getByRole('article').filter({ hasText: 'Sign in with Okta would help our team' })
     await expect(item).toBeVisible({ timeout: 30_000 }) // the worker processes it; the inbox polls

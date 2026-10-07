@@ -6,7 +6,7 @@ Status: accepted, 2026-10-07
 Extraction and adjudication may need different models. At about 1-2 cents per request (spec section 9), price doesn't decide the choice; false merges and gray-zone size do. CLAUDE.md requires every model call to go through `app/ai/gateway.py` and be recorded in ai_runs (rule 5), and requires an LLM step to beat the no-LLM baseline (rule 7). Tests never call a real model (rule 8).
 
 ## Decision
-- **One gateway, several clients.** The gateway has one method per step (`extract`, `adjudicate`, `rate_fit`, `draft_updates`, `related_needs_turn`, `decision_brief`) and these clients: `AnthropicClient` (which also runs agent turns with tools, the `ToolClient` protocol), `OfflineClient` (heuristics and the baselines), `FakeLLM` for tests, and the test-only `FaultInjectingClient`.
+- **One gateway, several clients.** The gateway has one method per step (`extract`, `adjudicate`, `rate_fit`, `draft_updates`, `related_needs_turn`, `decision_brief`; the last two use models chosen by judgment, not by eval, see ADR 0012) and these clients: `AnthropicClient` (which also runs agent turns with tools, the `ToolClient` protocol), `OfflineClient` (heuristics and the baselines), `FakeLLM` for tests, and the test-only `FaultInjectingClient`.
 - **Configuration.** The model per step and the prompt version come from configuration (FAST_MODEL, SMART_MODEL, and per-step overrides). Model IDs are never hard-coded at call sites.
 - **Evals decide, on the same frozen splits:**
   - C0: the baseline.

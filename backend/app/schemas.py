@@ -533,6 +533,10 @@ class RunStats(BaseModel):
     cost_per_call: float
     p50_ms: int
     p95_ms: int
+    input_tokens: int = 0  # uncached input, as the API reports it
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
 
 
 class OpsTotals(BaseModel):

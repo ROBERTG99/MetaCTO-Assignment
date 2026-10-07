@@ -162,7 +162,7 @@ export interface paths {
         put?: never;
         /**
          * Ask for a decision brief (the worker builds it; spends model calls in live mode)
-         * @description 202 with the queued brief. A brief already waiting for this need is returned instead of a second one. The overlap agent (read-only, at most 8 tool calls) runs first; the brief is verified in code.
+         * @description 202 with the queued brief. A brief already waiting for this need is returned instead of a second one. The related-needs agent (read-only, at most 8 tool calls) runs first; the brief is verified in code.
          */
         post: operations["ask_for_brief_needs__need_id__brief_post"];
         delete?: never;
@@ -1682,6 +1682,26 @@ export interface components {
             p50_ms: number;
             /** P95 Ms */
             p95_ms: number;
+            /**
+             * Input Tokens
+             * @default 0
+             */
+            input_tokens: number;
+            /**
+             * Output Tokens
+             * @default 0
+             */
+            output_tokens: number;
+            /**
+             * Cache Read Tokens
+             * @default 0
+             */
+            cache_read_tokens: number;
+            /**
+             * Cache Write Tokens
+             * @default 0
+             */
+            cache_write_tokens: number;
         };
         /**
          * Segment

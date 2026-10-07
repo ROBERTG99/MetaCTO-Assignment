@@ -1,6 +1,8 @@
 // GP2 (test-plan §4; spec F2; R7): submit a genuinely new request, then follow it to the need it was linked to.
 import { expect, test } from '@playwright/test'
 
+import { AI_MODE } from '../playwright.config.ts'
+
 import { actAsRequester, toasts } from './support.ts'
 
 test('a requester submits a new request and later sees its status and its need', async ({ page }) => {
@@ -22,6 +24,6 @@ test('a requester submits a new request and later sees its status and its need',
   // The need it was linked to: here a new one, created by the intake step, which says where it came from.
   await row.getByTestId('need-link').click()
   await expect(page.getByRole('heading', { level: 1 })).toContainText(/meeting rooms/i)
-  await expect(page.getByTestId('need-source')).toContainText('Offline baseline')
+  await expect(page.getByTestId('need-source')).toContainText(AI_MODE === 'live' ? 'Haiku' : 'Offline baseline')
   await expect(page.getByRole('region', { name: 'Requests' })).toContainText('Lily Tran')
 })

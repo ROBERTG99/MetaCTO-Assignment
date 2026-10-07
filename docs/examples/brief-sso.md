@@ -73,7 +73,7 @@ Build SAML SSO now, designed to work with both Okta and Entra ID and to support 
 
 ## How this brief was built
 
-1. **Overlap agent** (claude-haiku-4-5, prompt related_needs_v1): 5 of 8 tool calls, read-only tools only; complete.
+1. **Related-needs agent** (claude-haiku-4-5, prompt related_needs_v1): 5 of 8 tool calls, read-only tools only; complete.
 
 | # | Tool | Arguments | Result | Size | Latency |
 |---|---|---|---|---|---|

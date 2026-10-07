@@ -22,7 +22,7 @@ Around the hooks:
 
 Deterministic logic was written test-first. The failing run was shown before the implementation, with stubs in place so tests fail on assertions rather than imports. The exceptions are recorded too:
 - the 8 seed data checks in #9 passed on their first run, because the data was written first;
-- two Playwright specs were written after the code they test: GP5 (stakeholder updates, #19) and GP6 (provider failure, #21).
+- two Playwright specs were written after the code they test: GP5 (stakeholder updates, #19) and GP6 (provider failure, #21). GP7 ("Brief me", #25) was written first, like GP1-GP4.
 
 Real examples from the log:
 
@@ -35,6 +35,7 @@ Real examples from the log:
 | Priority score (#16) | 27 of 37 scoring tests, red on assertions against a stub | `app/scoring.py`; one test-data error fixed before green |
 | Commitment check (#19) | 12 tests, then 17 more from the review (curly apostrophes, "in two weeks", 24/7) | `app/ai/commitments.py` |
 | Hardening (#20) | 10 tests, then a regression test for `/needs/+1/support` | Route-matched rate limits, body caps, request IDs |
+| Decision briefs (#25) | 40 tests (25 brief, 9 gateway and client, 6 API) red on stub output, with FakeLLM scripted to make tool calls; GP7 red (no button); then 15 more red tests from the review | `app/ai/brief.py`, the gateway's agent turn and brief call, the job and the panel; two test bugs fixed and explained |
 
 **AI behaviour was eval-first, with three exceptions listed below.**
 - **Hard cases came before the prompt that had to pass them.** Robert wrote the 17 hard cases (`evals/datasets/test_handwritten.jsonl`) before any prompt existed.
@@ -44,8 +45,9 @@ Real examples from the log:
 
 Three exceptions:
 - `strategic_fit_v1.md` and its cases landed in the same commit (`5938328`), so the history can't show which came first;
-- `stakeholder_update_v1` has no eval at all; its safety net is the deterministic commitment check plus a PM approving every message (requirements D8);
-- extraction has no eval of its own; it is measured only through the routing decisions it feeds.
+- `stakeholder_update_v1` has no eval at all; its safety net is the deterministic commitment check plus a PM approving every message (requirements D8 for the feature, D10 for the eval gap);
+- extraction has no eval of its own; it is measured only through the routing decisions it feeds;
+- the brief's two prompts (`related_needs_v1`, `decision_brief_v1`, #25) have no eval yet. Their deterministic checks were written test-first, and the comparison an eval would need to beat (the nearest-need baseline, the template brief) is in the code (ADR 0012).
 
 ## How the evals changed the decisions
 
@@ -66,7 +68,7 @@ The AI proposed, compared options and showed evidence; these calls were Robert's
 - **The commitment rule.** Flag timing and promises "unless the PM entered a date".
 - **The process.** The CLAUDE.md rules, the permission scope, and every paid run's go.
 
-One scope call was first made by omission. ADR 0001 planned to drop the overlap agent if time ran short and keep the decision brief (F6), and Robert's rule was the same: "the agent goes and the brief stays". The first pass built neither, because the session moved on to the UI and hardening, not by an explicit decision. Robert then asked for both (#24): the brief as a workflow and the agent as the one bounded, read-only, verified loop. He leaned towards a manual loop on the plain SDK, and the comparison in [ADR 0012](adr/0012-decision-briefs-bounded-agent-manual-loop.md) agreed.
+One scope call was first made by omission. ADR 0001 planned to drop the related-needs agent if time ran short and keep the decision brief (F6), and Robert's rule was the same: "the agent goes and the brief stays". The first pass built neither, because the session moved on to the UI and hardening, not by an explicit decision. Robert then asked for both (#25): the brief as a workflow and the agent as the one bounded, read-only, verified loop. He leaned towards a manual loop on the plain SDK, and the comparison in [ADR 0012](adr/0012-decision-briefs-bounded-agent-manual-loop.md) agreed.
 
 ## Where the AI got it wrong
 
@@ -82,3 +84,19 @@ Each case comes from the log: what Claude did, how it was caught, and what chang
 | Counted informational "related" suggestions as waiting for a PM, so M1 understated how many requests no PM had to touch | Checking the metrics after the e2e flow, before reporting them (#19) | A failing test, then the fix |
 | Labelled AI-created needs "Created by PM" on the requester page (a subagent's page) | The consistency pass across both UI halves (#18) | One shared component for both need pages |
 | Bound the web app to `localhost`, which is IPv6-only on the Linux CI runner, so Playwright never found it | The first CI run on GitHub (#22) | An explicit 127.0.0.1 bind, and server logs piped into CI |
+| Wrote the live-brief script with `load_seed(engine)`, which loads the raw seed: 62 pending requests the live worker would have sent through the pipeline (about 124 paid calls) before the brief | Claude checked the queue in a scratch database before spending (#25) | The snapshot seed, and a guard that refuses to run while any other job is queued |
+| Ran offline Playwright runs after each live golden-path run. They share and reseed `backend/data/e2e.db`, so both live runs' `ai_runs` rows were erased: the first run's by the offline runs between the two live runs, and the final run's rows behind REPORT §6 by the offline `make e2e` after it. A copy taken right after the final run missed the WAL file and was empty | Reviewer subagent, checking the report's numbers against the data (#27) | `make e2e-live` now has its own database; REPORT §6 states that its golden-path figures come from the queries made at the time and can't be re-derived |
+| Wrote "settings ask first" on the two new paid Makefile targets, which wasn't true: `Bash(make *)` is allowed and only `make eval` and `make seed-live` ask | Reviewer subagent (#27) | The comments say the targets need Robert's go; an ask rule is proposed to Robert, not applied (`.claude/` changes are his) |
+| Shipped the first brief build with 8 should-fix issues, among them: a tool exception that lost the brief; JSON-escaped tool results that made correct accented quotes fail; a 30 s timeout that a long Sonnet brief would hit; a failed repair call that threw away a usable brief; a call list that hid retries | Reviewer subagent (#25) | All fixed test-first, 15 new tests |
+
+## The last prompts: decision briefs and the live validation (#24-#27)
+
+- **The loop choice (#25).** Robert asked for the agent options to be compared before building. A manual loop on the plain SDK won on control (every turn goes through the gateway), testability (FakeLLM scripted with tool calls at our seam) and hosting (our process). Robert's lean was the same. ADR 0012 has the table.
+- **Bounds first, as tests.** The 8-call cap, read-only tools, cited verbatim findings, money only from the data, one repair round and the brief surviving the agent were each a failing test before any loop code existed.
+- **One live brief (Robert's go).** The SSO brief: 5 of 8 tool calls in 3 Haiku turns, one Sonnet call, 0 of 28 claims flagged, $0.0427 ([example](examples/brief-sso.md)). The cache write (2,621 tokens) shows the system prompt is above Sonnet's minimum. No cache read was shown, because there was only one call.
+- **The live validation (asked in #24, run under #27, Robert's go in both).** The first live run of the golden paths passed 5 of 7. Neither failure was a product bug:
+  - GP3's "gray zone" text is gray only for the embedding baseline, and Haiku correctly auto-linked it;
+  - GP2 expected the offline label.
+
+  The specs became mode-aware, and AI Ops gained the token columns it lacked. The final run passed 7 of 7 with 14 calls for $0.0688. The whole validation cost $0.1827 ([REPORT §6](../evals/REPORT.md#6-live-validation-2026-10-07-not-an-eval)).
+- **What stayed human.** The go for every paid run, the loop lean, and the push of the docs commit (declined once, then pushed with the feature).

@@ -7,11 +7,14 @@ import { defineConfig, devices } from '@playwright/test'
 const API_PORT = 8001
 const WEB_PORT = 5174
 export const API_URL = `http://127.0.0.1:${API_PORT}`
+// `make e2e-live` sets this to live for a paid validation run; CI and `make e2e` stay offline.
+export const AI_MODE = process.env.E2E_AI_MODE === 'live' ? 'live' : 'offline'
 
 const backend = [
   'cd ../backend',
   'mkdir -p data',
-  'export DATABASE_URL=sqlite:///./data/e2e.db AI_MODE=offline APP_ENV=test HF_HUB_OFFLINE=1',
+  // a live run keeps its own database, so an offline run never overwrites the live ai_runs
+  `export DATABASE_URL=sqlite:///./data/${AI_MODE === 'live' ? 'e2e-live' : 'e2e'}.db AI_MODE=${AI_MODE} APP_ENV=test HF_HUB_OFFLINE=1`,
   'uv run python -m seed.load',
   `uv run uvicorn app.main:app --host 127.0.0.1 --port ${API_PORT} --no-access-log`,
 ].join(' && ')
