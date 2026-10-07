@@ -4,6 +4,7 @@ paths:
   - "**/llm/**"
   - "**/prompts/**"
   - "evals/**"
+  - "config/**"
 ---
 # Rules for code that calls a model
 

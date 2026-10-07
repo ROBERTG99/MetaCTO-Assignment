@@ -31,10 +31,13 @@
     ],
     "deny": [
       "Read(.env)",
+      "Read(.env.local)",
+      "Read(.env.*.local)",
       "Edit(/prompts.audit.jsonl)",
       "Bash(git push *--force*)",
       "Bash(git push -f*)",
-      "Bash(git push * -f*)"
+      "Bash(git push * -f*)",
+      "Bash(git push * +*)"
     ]
   },
   "hooks": {

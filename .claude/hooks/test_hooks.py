@@ -323,6 +323,33 @@ class AuditTests(HookTestCase):
         self.assertEqual(entry["log_bytes"], len(FIRST_ENTRY.encode()))
         self.assertRegex(entry["ts"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
 
+    def test_redacts_common_secret_formats(self) -> None:
+        # Built at runtime so no key-shaped literal is committed (and secret scanners stay quiet).
+        body = "Ab3" * 14
+        secrets = [
+            "sk-ant-api03-" + body,
+            "sk-proj-" + body,
+            "sk-" + body[:32],
+            "ghp_" + body[:36],
+            "github_pat_" + body[:22] + "_" + body[:30],
+            "AKIA" + "IOSFODNN7" + "ABCDEFG",
+            "xoxb-" + "1234567890-" + body[:24],
+            "-----BEGIN RSA " + "PRIVATE KEY-----\nMIIEow\n" + body + "\n-----END RSA " + "PRIVATE KEY-----",
+        ]
+        mentions = "Rotate the sk-ant- key, sk-short, task-" + "Zz9" * 14 + " and the ghp_ prefix."
+        prompt = "Use " + " and ".join(secrets) + " now.\n" + mentions
+        self.submit(prompt)
+        logged = json.loads(self.read(self.audit).splitlines()[-1])["prompt"]
+        for secret in secrets:
+            with self.subTest(secret=secret[:12]):
+                self.assertNotIn(secret, logged)
+        self.assertEqual(logged.count("[REDACTED]"), len(secrets))
+        self.assertTrue(logged.startswith("Use [REDACTED] and [REDACTED]"), logged)
+        self.assertTrue(logged.endswith("\n" + mentions), logged)  # prefixes and lookalikes are kept
+        cut = "-----BEGIN OPENSSH " + "PRIVATE KEY-----\n" + body  # paste cut off before the END line
+        self.submit("Key:\n" + cut)
+        self.assertEqual(json.loads(self.read(self.audit).splitlines()[-1])["prompt"], "Key:\n[REDACTED]")
+
     def test_works_before_prompts_txt_exists(self) -> None:
         os.remove(self.log)
         self.submit()
@@ -340,12 +367,18 @@ class FormatterTests(HookTestCase):
                    "tool_input": {"file_path": path}}  # fmt: skip
         return run("format_python.py", self.dir, payload)
 
-    def with_ruff(self) -> None:
+    def ruff(self) -> str:
+        """The ruff on PATH. Skips without one, or fails when HOOK_TESTS_REQUIRE_RUFF=1 is set."""
         ruff = shutil.which("ruff")
         if not ruff:
+            if os.environ.get("HOOK_TESTS_REQUIRE_RUFF") == "1":
+                self.fail("ruff is not on PATH and HOOK_TESTS_REQUIRE_RUFF=1")
             self.skipTest("ruff is not on PATH")
+        return ruff
+
+    def with_ruff(self) -> None:
         os.makedirs(os.path.join(self.dir, "backend", ".venv", "bin"))
-        os.symlink(ruff, os.path.join(self.dir, "backend", ".venv", "bin", "ruff"))
+        os.symlink(self.ruff(), os.path.join(self.dir, "backend", ".venv", "bin", "ruff"))
 
     def test_noop_without_a_project_ruff(self) -> None:
         path = os.path.join(self.dir, "a.py")
@@ -361,11 +394,8 @@ class FormatterTests(HookTestCase):
         self.assertEqual(self.read(path), "from datetime import datetime\n\nx = 1\n")
 
     def test_uses_a_venv_at_the_project_root(self) -> None:
-        ruff = shutil.which("ruff")
-        if not ruff:
-            self.skipTest("ruff is not on PATH")
         os.makedirs(os.path.join(self.dir, ".venv", "bin"))
-        os.symlink(ruff, os.path.join(self.dir, ".venv", "bin", "ruff"))
+        os.symlink(self.ruff(), os.path.join(self.dir, ".venv", "bin", "ruff"))
         path = os.path.join(self.dir, "pkg", "mod.py")
         os.makedirs(os.path.dirname(path))
         self.write(path, "import os\ny=2\n")

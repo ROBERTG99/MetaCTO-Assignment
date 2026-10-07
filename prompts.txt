@@ -96,3 +96,35 @@ SUMMARY:
 - Created .gitignore (also .env.* except .env.example, SQLite -wal/-shm, Drive sync files, .claude/settings.local.json), .env.example, Makefile (check-hooks), README.md placeholder.
 - Entry format switched to the one the hook tests use (---, [#N] ts, PROMPT:, SUMMARY:); entry #3 used an improvised format and stays as is (append-only).
 - Committed "chore: AI-assisted development harness" and pushed main (also pushes the earlier docs commit).
+
+---
+[#5] 2026-10-07T14:16:32Z
+PROMPT:
+I reopened this session in MetaCTO-Assignment/, so the hooks should load from now on. Don't backfill the audit file; this prompt is the first one it should log. My call on your review:
+
+1. You're right, I was in bypass mode, and I'm not anymore. Change nothing in .claude/ without my go, except what I approve below.
+2. CLAUDE.md in this repo should have an "Entry format" block under "How to apply the logging rule". Check it. If it's missing, P2 was written to the parent folder; tell me and don't recreate it yourself. Keep using the format from the tests.
+3. Keep committing prompts.audit.jsonl, because it's the evidence. Test first: make log_prompt.py replace common key formats (sk-ant-, sk- with 32+ chars, ghp_/github_pat_, AKIA, xox*-, private key blocks) with [REDACTED] before writing, with a test that fails before the change. Redact the same way if a secret ever shows up in a prompt you log in prompts.txt.
+4. Update reviewer.md: review the range I give it (git diff <base>..HEAD for a feature that spans commits), and default to git diff HEAD, since it runs before the commit.
+5. Set the reviewer to model: opus and keep effort: high. Bash stays because it needs git and tests; say in its instructions that Bash is read-only (no commit, push, install or delete).
+6. Keep the background_tasks check. It's harmless either way.
+7. Make the formatter tests fail instead of skip when HOOK_TESTS_REQUIRE_RUFF=1 is set. In P7, check-hooks will run them with backend/.venv/bin on PATH and that variable set.
+8. Keep Edit(/prompts.txt). Claude Code checks a shell redirect target (cat >> prompts.txt) against Edit rules, so without it every log append would ask me. The guard still blocks the Edit tool itself.
+9. Add deny rules for Read(.env.local) and Read(.env.*.local). Bash reads are covered by the Never rule; I accept that limit.
+10. Leave it. The audit file is committed after every prompt, so git can restore it.
+11. Add a deny rule for Bash(git push * +*). Leave the rest; the deny rules are for accidents, not attacks.
+12. Add "config/**" to llm-code.md's paths. Leave the API claims; they were checked against the claude-api skill.
+13. Make quality-gate say it runs before committing a code change and that docs-only changes skip it.
+
+Done when: the redaction test went red and then green, all 29 hook tests pass (ruff skips are fine until P7), prompts.audit.jsonl exists and contains this prompt, settings.json still has the project rules, and git status is clean after commit "chore(harness): apply review fixes" and push.
+SUMMARY:
+- Item 2: CLAUDE.md has no "How to apply the logging rule" section or "Entry format" block. No CLAUDE.md exists in the parent folder (MetaCTO/) either, and entry #2 here is a summary, not the verbatim P2, so the original text can't be recovered from the log. Not recreated. Kept the test format (---, [#N] ts, PROMPT:, SUMMARY:).
+- Item 3 (TDD): added AuditTests.test_redacts_common_secret_formats (fake keys built at runtime). Red: 9 failures, 0 of 8 secrets redacted. Fixed one test bug: the lookalike "task-<body>" contained the sk- secret as a substring. Implemented SECRET regex + redact() in log_prompt.py; prefix-only mentions ("sk-ant-", "ghp_") are kept. Green. After the reviewer, added an unterminated PEM block case: red, then green (redacts to the end of the prompt).
+- Items 4/5: reviewer.md uses model: opus, effort: high, reviews the given range (git diff <base>..HEAD) and defaults to git diff HEAD; Bash is read-only (no commit, push, install or delete).
+- Item 7: FormatterTests use a ruff() helper that fails instead of skipping when HOOK_TESTS_REQUIRE_RUFF=1 is set (checked: 3 failures with it, 3 skips without it).
+- Items 9/11/12/13: deny Read(.env.local), Read(.env.*.local) and Bash(git push * +*); added config/** to llm-code.md; quality-gate runs before committing a code change and docs-only changes skip it. settings.json still validates, and the project allow/ask rules and all 4 hooks are intact. Items 6, 8 and 10 left as they are.
+- Hook tests: Ran 29, OK (skipped=3): ruff isn't on PATH yet (P7).
+- Reviewer subagent (git diff HEAD) said "fix first". Fixed #2 (docstring) and #3 (unterminated PEM). Reported the rest to the user without changing them: prompts.txt has no automated redaction guard; .env deny rules only match the root; gho_/ghs_/ASIA/aws_secret_access_key aren't covered; the sk- pattern can redact long kebab-case slugs; config/** won't match backend/config/.
+- prompts.audit.jsonl has this prompt as line 1, plus a 2nd line: the reviewer's hand-back message, which Claude Code delivered through UserPromptSubmit. Left as is (append-only); reported.
+- No make check target exists yet (only check-hooks), so the quality gate is the hook test run above.
+- Committed "chore(harness): apply review fixes" with prompts.audit.jsonl, then pushed.
