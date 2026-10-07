@@ -9,6 +9,7 @@ export const keys = {
   needs: (params?: object) => (params ? (['needs', params] as const) : (['needs'] as const)),
   need: (id: number) => ['need', id] as const,
   needUpdates: (id: number) => ['need-updates', id] as const,
+  brief: (id: number) => ['brief', id] as const,
   similar: (q: string) => ['similar', q] as const,
   myRequests: (requesterId: number) => ['my-requests', requesterId] as const,
   triage: ['triage'] as const,

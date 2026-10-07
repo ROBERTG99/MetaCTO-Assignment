@@ -76,6 +76,11 @@ def account_count(session: Session, need_id: int) -> int:
     return len(_inputs(session, [need_id])[need_id].account_ids)
 
 
+def account_ids(session: Session, need_id: int) -> set[int]:
+    """The accounts behind a need, as priority counts them: member requests and confirmed supports."""
+    return set(_inputs(session, [need_id])[need_id].account_ids)
+
+
 def _strategic_out(
     need: Need, b: Breakdown, rows: list[GoalRating], run: AIRun | None, cfg: PrioritiesConfig
 ) -> StrategicOut:

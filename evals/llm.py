@@ -82,13 +82,13 @@ class CachingClient:
         ).hexdigest()
 
     def complete(self, *, step: str, model: str, system: str, user: str, schema: type[BaseModel], max_tokens: int,
-                 effort: str | None, inputs: dict[str, Any]) -> Reply:  # fmt: skip
+                 effort: str | None, inputs: dict[str, Any], cache: bool = False) -> Reply:  # fmt: skip
         k = self.key(step, model, effort, system, user, max_tokens)
         hit = self._cache.get(k)
         if hit is None:
             start = time.perf_counter()
             reply = self.inner.complete(step=step, model=model, system=system, user=user, schema=schema,
-                                        max_tokens=max_tokens, effort=effort, inputs=inputs)  # fmt: skip
+                                        max_tokens=max_tokens, effort=effort, inputs=inputs, cache=cache)  # fmt: skip
             hit = {"key": k, "step": step, "model": model, "effort": effort, "served_model": reply.model,
                    "output": reply.output.model_dump(), "usage": [reply.usage.input_tokens, reply.usage.output_tokens],
                    "latency_ms": (time.perf_counter() - start) * 1000}  # fmt: skip

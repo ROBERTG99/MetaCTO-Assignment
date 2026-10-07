@@ -11,6 +11,7 @@ from app.limits import public_write
 from app.models import NeedStatus, Segment
 from app.schemas import (
     MAX_ID,
+    BriefOut,
     ErrorResponse,
     NeedDetail,
     NeedPage,
@@ -22,8 +23,8 @@ from app.schemas import (
     SupportCreate,
     SupportOut,
 )
+from app.services import briefs, triage, updates
 from app.services import needs as service
-from app.services import triage, updates
 
 router = APIRouter(tags=["needs"])
 NeedId = Path(ge=1, le=MAX_ID)
@@ -145,3 +146,28 @@ def redraft(
 ) -> dict[str, Any]:
     change = updates.redraft(session, need_id, change_id)
     return updates.change_out(session, change)
+
+
+@router.post(
+    "/needs/{need_id}/brief",
+    response_model=BriefOut,
+    status_code=202,
+    responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 422: {"model": ErrorResponse}},
+    summary="Ask for a decision brief (the worker builds it; spends model calls in live mode)",
+    description="202 with the queued brief. A brief already waiting for this need is returned instead of a "
+    "second one. The overlap agent (read-only, at most 8 tool calls) runs first; the brief is verified in code.",
+)
+def ask_for_brief(
+    body: Decision, need_id: int = NeedId, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    return briefs.brief_out(session, briefs.request_brief(session, need_id, body.by))
+
+
+@router.get(
+    "/needs/{need_id}/brief",
+    response_model=BriefOut,
+    responses={404: {"model": ErrorResponse}, 422: {"model": ErrorResponse}},
+    summary="The newest decision brief for a need, with its checks, the agent's steps and the model calls",
+)
+def get_brief(need_id: int = NeedId, session: Session = Depends(get_session)) -> dict[str, Any]:
+    return briefs.brief_out(session, briefs.latest(session, need_id))

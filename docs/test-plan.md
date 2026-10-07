@@ -10,7 +10,7 @@ What we prove and how. Flows and formulas are in [spec.md](spec.md). Every flow 
 | API | pytest + FastAPI TestClient, temporary SQLite, FakeLLM | `make check`, CI | Endpoints, status transitions, idempotency, "nothing is deleted" | `backend/tests/api/` |
 | Contract | `make openapi` then `git diff --exit-code backend/openapi.json`; `npm run gen:api` then `git diff --exit-code` on the generated types | CI (backend and frontend jobs) | Frontend and backend agree on the API | `backend/openapi.json`, `frontend/src/api/schema.d.ts` |
 | Eval | `evals/` runner on the same pipeline and gateway | `make eval-offline` (free, CI); `make eval` (paid, manual, asks first) | Model and baseline quality, cost, latency | `evals/`, `evals/REPORT.md` |
-| E2E | Playwright (Chromium), offline mode, seeded data | `make e2e`, CI | Golden paths GP1-GP6 | `frontend/e2e/` |
+| E2E | Playwright (Chromium), offline mode, seeded data | `make e2e`, CI | Golden paths GP1-GP7 | `frontend/e2e/` |
 | Hardening | Rate limits, body caps, CORS and headers, request IDs into ai_runs, health and readiness, log redaction, portal data boundary, spend ceiling | `make test`, CI | ADR 0011 | `api/test_hardening_api.py`, `api/test_portal_api.py` |
 | Eval gate | The free offline baseline must stay above `evals/gates.yaml` | `make eval-gate`, CI | REPORT §1 | `evals/gate.py`, `evals/tests/test_gate.py` |
 | Hooks | unittest | `make check-hooks` (with `HOOK_TESTS_REQUIRE_RUFF=1` and backend/.venv/bin on PATH, once the backend exists) | Prompt logging, guard, formatter | `.claude/hooks/test_hooks.py` |
@@ -47,7 +47,8 @@ No test calls a real model (CLAUDE.md rule 8). Unit and API tests inject FakeLLM
 | Runner logic: dev labels, noise, raw tuning mode, each test case counted once (passing) | `evals/tests/test_run.py` |
 | Strategic-fit eval and the offline gate (passing) | `evals/tests/test_fit.py`, `evals/tests/test_gate.py` |
 | Requester progress: stuck after 2 minutes (passing) | `frontend/src/pages/requester/progress.test.ts` (Vitest) |
-| Overlap agent and brief verifier: not built (F6 cut) | none |
+| Decision brief with FakeLLM scripted to call tools: the agent stops at 8 tool calls and flags the result incomplete; only three strict read-only tools, anything else rejected unrun; bad arguments are an error result; findings cite a request of the related need with a verbatim quote (fabricated, wrong-need, self and merged findings flagged); tool results redacted; trajectory with arguments, result size, latency and turn run; the brief survives an agent failure or timeout and says so; money only from the data (invented figures removed); unknown fact keys flagged; one repair round, then flags; related needs must be verified findings; review fixes: a raising tool is an error step, accented text reaches the model unescaped, one max_tokens retry per agent turn, a failed repair call keeps the first brief, the version with fewer failing claims wins, at most 25 requests ranked by severity, overlapping figures replaced once, the 5% tolerance boundary, invented figures removed from failing quotes; offline baseline and template; the markdown example (passing) | `unit/test_brief.py` |
+| Live client agent turns: strict tools, `tool_choice` none for the last turn, validated answer, refusals and limits; a cached step marks its system prompt; a long step gets its own timeout; cache tokens recorded and costed (passing) | `unit/test_anthropic_client.py`, `unit/test_gateway.py` |
 
 **API modules** (written alongside the endpoints, from the transitions in spec §5):
 
@@ -64,7 +65,7 @@ No test calls a real model (CLAUDE.md rule 8). Unit and API tests inject FakeLLM
 | Metrics endpoint and the PM workspace (passing) | `api/test_workspace_api.py` (`GET /metrics`) |
 | Stakeholder updates: nothing goes out without approval, compare-and-set, superseded drafts (passing) | `api/test_updates_api.py` |
 | Requester portal: no PM data (passing) | `api/test_portal_api.py` |
-| Briefs: not built (F6 cut) | none |
+| Briefs: 202 and the worker builds it, newest returned, a waiting brief reused (and a partial unique index behind it), 404/409/422, failed with the reason, transient retry, reclaim after a crash, every call listed by trace ID even for a failed brief, the last ready brief kept reachable (passing) | `api/test_briefs_api.py` |
 
 **Eval-first.** Adjudication was eval-first: the 17 hard cases and the frozen test set came before any prompt (§3). Extraction is evaluated only through routing (row "Extraction" below). Two exceptions are recorded in [ai-development.md](ai-development.md#test-first-and-eval-first): `strategic_fit_v1` and its cases landed in the same commit, and `stakeholder_update_v1` has no eval. A prompt or model change bumps the prompt version and requires an eval run (rule 7).
 
@@ -133,12 +134,12 @@ Test-set composition. Robert's 17 handwritten cases (`H…`, `reviewed_by_human:
 
 **Should-flow slices** (added when the flow is built):
 - Strategic fit: 10 seeded needs plus one prompt-injection case, rated 0-3 per goal by Robert before any paid call (`evals/datasets/strategic_fit.jsonl`; `evals/fit.py` refuses a paid run until every case is labelled and reviewed). Reports agreement within one point, exact agreement, MAE and Spearman of S against constant and embedding baselines, plus the quote verification rate (REPORT §5). Report-only: no dev split.
-- Brief and agent: not built (F6 was cut), so they have no slices.
+- Brief and agent: not built as eval slices yet. The verifier is covered deterministically by `unit/test_brief.py` (planted fabricated quotes, figures, fact keys and related needs); the quality of `related_needs_v1` and `decision_brief_v1` has no eval (ADR 0012). The comparison to beat is the offline baseline.
 - Commitment flags (F7): covered by the deterministic check's unit tests (`unit/test_commitments.py`), not by an eval. `stakeholder_update_v1` itself has no eval (requirements D8).
 
 ## 4. E2E golden paths (offline, seeded, Chromium)
 
-GP1-GP4 were written before the pages (2026-10-07) as the contract for them; GP5 (#19) and GP6 (#21) were written after the code they test ([ai-development.md](ai-development.md#test-first-and-eval-first)). All of them select by accessible names, roles and visible text, not CSS. `make e2e` starts a fresh offline API on :8001 (its own `backend/data/e2e.db`, reseeded from the recorded snapshot every run) with the in-process worker, and the web app on :5174; the specs share that database and run one at a time.
+GP1-GP4 and GP7 (#24) were written before the pages as the contract for them; GP5 (#19) and GP6 (#21) were written after the code they test ([ai-development.md](ai-development.md#test-first-and-eval-first)). All of them select by accessible names, roles and visible text, not CSS. `make e2e` starts a fresh offline API on :8001 (its own `backend/data/e2e.db`, reseeded from the recorded snapshot every run) with the in-process worker, and the web app on :5174; the specs share that database and run one at a time.
 
 | ID | Spec | Path | Proves |
 |---|---|---|---|
@@ -148,15 +149,16 @@ GP1-GP4 were written before the pages (2026-10-07) as the contract for them; GP5
 | GP4 | `e2e/pm-priorities.spec.ts` | The quadrant shows clear wins, strategic bets, popular but off-strategy, park and not rated yet, with every undecided need placed; the SSO row's "Explain score" opens a breakdown whose demand, urgency and strategic-fit sections explain their inputs and whose points add up to the score in the table | F4, §8; R10 |
 | GP5 | `e2e/stakeholder-updates.spec.ts` | The PM marks SSO planned with a reason that says "next quarter" and no date; personal drafts appear (offline template), none sent; Priya's refers to what she asked for and is flagged; the PM fixes and approves every personal draft; AI Ops shows M3 with a value; Priya sees the update on the need page | F7, M3; ADR 0010 |
 | GP6 | `e2e/provider-failure.spec.ts` | The provider fails (a fault switch that exists only with `APP_ENV=test`, triggered by a marker in the text): the request is saved, the requester sees "Needs review" with a plain reason, the PM sees it in Needs review with the real reason. Linking it by hand isn't built yet | F2 failure path, rule 2 |
+| GP7 | `e2e/brief-me.spec.ts` | The PM opens the SSO need and clicks "Brief me"; the brief appears (offline baseline and template) with its source, summary, recommendation, impact claims showing their cited values, verbatim evidence and "All N claims checked"; "How this brief was built" shows the agent steps against the cap of 8 and the model calls | F6; ADR 0012 |
 
 The offline texts were chosen by measuring the real embedder against the seeded backlog, so each lands in its band deterministically; a seed or threshold change can move them, and the spec comments give the measured similarity.
 
 Notes for building the pages against these specs:
-- **Shared database, fixed order.** Specs run one at a time in file order (discover-and-support, pm-priorities, pm-triage, provider-failure, stakeholder-updates, submit-and-track). The triage spec changes the backlog (an accept, an undo that creates a need); the others don't depend on its result. Offline, any membership change queues a strategic-fit rating that only live mode runs, so touched needs show "Pending".
+- **Shared database, fixed order.** Specs run one at a time in file order (brief-me, discover-and-support, pm-priorities, pm-triage, provider-failure, stakeholder-updates, submit-and-track). The triage spec changes the backlog (an accept, an undo that creates a need); the others don't depend on its result. Offline, any membership change queues a strategic-fit rating that only live mode runs, so touched needs show "Pending".
 - **Offline claims are disputed.** GP1's reason is 0.584 similar to SSO, below the suggest band, so the baseline disputes the claim; the spec accepts any of the three states.
 - **Polling.** My requests and the triage inbox must refetch on an interval while anything is pending (headless browsers don't refocus), or the 30 s waits fail.
 - **Stable hooks the pages must provide:** `data-testid` `support-confirmation`, `request-status`, `need-link`, `need-source`, `routing-badge`, `priority`, `points` (one per rated component; none for an unrated one), `priority-total`; `data-request-id` on Auto-linked articles; toasts through sonner's "Notifications" region.
-- **API work the pages needed** is built (2026-10-07): AI source and routing parts on triage items, a written reason for baseline decisions, `GET /requests?requester_id=`, the Auto-linked list (newest 50, with a total), need origin, analysis, evidence, updates and audit trail, `PATCH /needs/{id}/status`, `GET /metrics`, and the requester views under `/portal`. All six specs pass (`make e2e`, and in CI); contract tests in `api/test_workspace_api.py`, `api/test_updates_api.py` and `api/test_portal_api.py`.
+- **API work the pages needed** is built (2026-10-07): AI source and routing parts on triage items, a written reason for baseline decisions, `GET /requests?requester_id=`, the Auto-linked list (newest 50, with a total), need origin, analysis, evidence, updates and audit trail, `PATCH /needs/{id}/status`, `GET /metrics`, and the requester views under `/portal`. All seven specs pass (`make e2e`, and in CI); contract tests in `api/test_workspace_api.py`, `api/test_updates_api.py` and `api/test_portal_api.py`.
 
 ## 5. What we deliberately don't test
 

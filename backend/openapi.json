@@ -635,6 +635,133 @@
         }
       }
     },
+    "/needs/{need_id}/brief": {
+      "post": {
+        "tags": [
+          "needs"
+        ],
+        "summary": "Ask for a decision brief (the worker builds it; spends model calls in live mode)",
+        "description": "202 with the queued brief. A brief already waiting for this need is returned instead of a second one. The overlap agent (read-only, at most 8 tool calls) runs first; the brief is verified in code.",
+        "operationId": "ask_for_brief_needs__need_id__brief_post",
+        "parameters": [
+          {
+            "name": "need_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Need Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Decision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "needs"
+        ],
+        "summary": "The newest decision brief for a need, with its checks, the agent's steps and the model calls",
+        "operationId": "get_brief_needs__need_id__brief_get",
+        "parameters": [
+          {
+            "name": "need_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Need Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    },
     "/triage": {
       "get": {
         "tags": [
@@ -1556,6 +1683,137 @@
         ],
         "title": "AccountOut"
       },
+      "AgentFinding": {
+        "properties": {
+          "need_id": {
+            "type": "integer",
+            "title": "Need Id"
+          },
+          "relation": {
+            "type": "string",
+            "title": "Relation"
+          },
+          "rationale": {
+            "type": "string",
+            "title": "Rationale"
+          },
+          "request_id": {
+            "type": "integer",
+            "title": "Request Id"
+          },
+          "quote": {
+            "type": "string",
+            "title": "Quote"
+          },
+          "verified": {
+            "type": "boolean",
+            "title": "Verified"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem"
+          },
+          "need_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Need Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "need_id",
+          "relation",
+          "rationale",
+          "request_id",
+          "quote",
+          "verified",
+          "problem",
+          "need_title"
+        ],
+        "title": "AgentFinding"
+      },
+      "AgentStep": {
+        "properties": {
+          "n": {
+            "type": "integer",
+            "title": "N"
+          },
+          "tool": {
+            "type": "string",
+            "title": "Tool"
+          },
+          "args": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Args"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "rejected",
+              "error",
+              "budget"
+            ],
+            "title": "Status"
+          },
+          "result_chars": {
+            "type": "integer",
+            "title": "Result Chars"
+          },
+          "latency_ms": {
+            "type": "integer",
+            "title": "Latency Ms"
+          },
+          "ai_run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Run Id"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "n",
+          "tool",
+          "args",
+          "status",
+          "result_chars",
+          "latency_ms",
+          "ai_run_id",
+          "note"
+        ],
+        "title": "AgentStep"
+      },
       "AuditEvent": {
         "properties": {
           "at": {
@@ -1614,6 +1872,590 @@
           "summary"
         ],
         "title": "AuditEvent"
+      },
+      "BriefBody": {
+        "properties": {
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "problem": {
+            "type": "string",
+            "title": "Problem"
+          },
+          "who_is_affected": {
+            "type": "string",
+            "title": "Who Is Affected"
+          },
+          "business_impact": {
+            "items": {
+              "$ref": "#/components/schemas/BriefImpact"
+            },
+            "type": "array",
+            "title": "Business Impact"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/BriefEvidence"
+            },
+            "type": "array",
+            "title": "Evidence"
+          },
+          "related_needs": {
+            "items": {
+              "$ref": "#/components/schemas/BriefRelatedOut"
+            },
+            "type": "array",
+            "title": "Related Needs"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/BriefOptionOut"
+            },
+            "type": "array",
+            "title": "Options"
+          },
+          "recommendation": {
+            "type": "string",
+            "title": "Recommendation"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence"
+          },
+          "confidence_rationale": {
+            "type": "string",
+            "title": "Confidence Rationale"
+          },
+          "risks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Risks"
+          },
+          "open_questions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Open Questions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "summary",
+          "problem",
+          "who_is_affected",
+          "business_impact",
+          "evidence",
+          "related_needs",
+          "options",
+          "recommendation",
+          "confidence",
+          "confidence_rationale",
+          "risks",
+          "open_questions"
+        ],
+        "title": "BriefBody"
+      },
+      "BriefCall": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "step": {
+            "type": "string",
+            "title": "Step"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          },
+          "input_tokens": {
+            "type": "integer",
+            "title": "Input Tokens"
+          },
+          "output_tokens": {
+            "type": "integer",
+            "title": "Output Tokens"
+          },
+          "cache_read_tokens": {
+            "type": "integer",
+            "title": "Cache Read Tokens"
+          },
+          "cache_write_tokens": {
+            "type": "integer",
+            "title": "Cache Write Tokens"
+          },
+          "cost_usd": {
+            "type": "number",
+            "title": "Cost Usd"
+          },
+          "latency_ms": {
+            "type": "integer",
+            "title": "Latency Ms"
+          },
+          "outcome": {
+            "type": "string",
+            "title": "Outcome"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "step",
+          "model",
+          "prompt_version",
+          "input_tokens",
+          "output_tokens",
+          "cache_read_tokens",
+          "cache_write_tokens",
+          "cost_usd",
+          "latency_ms",
+          "outcome"
+        ],
+        "title": "BriefCall",
+        "description": "One model call behind the brief, from ai_runs: what it cost and how long it took."
+      },
+      "BriefCheck": {
+        "properties": {
+          "part": {
+            "type": "string",
+            "title": "Part"
+          },
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem"
+          }
+        },
+        "type": "object",
+        "required": [
+          "part",
+          "ok",
+          "problem"
+        ],
+        "title": "BriefCheck"
+      },
+      "BriefContent": {
+        "properties": {
+          "brief": {
+            "$ref": "#/components/schemas/BriefBody"
+          },
+          "facts": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/BriefFact"
+            },
+            "type": "object",
+            "title": "Facts"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/BriefCheck"
+            },
+            "type": "array",
+            "title": "Checks"
+          },
+          "flagged": {
+            "type": "integer",
+            "title": "Flagged"
+          },
+          "repaired": {
+            "type": "boolean",
+            "title": "Repaired"
+          },
+          "repair_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repair Error"
+          },
+          "related": {
+            "$ref": "#/components/schemas/BriefRelatedSection"
+          },
+          "runs": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Runs"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "brief",
+          "facts",
+          "checks",
+          "flagged",
+          "repaired",
+          "related",
+          "runs",
+          "model",
+          "prompt_version"
+        ],
+        "title": "BriefContent"
+      },
+      "BriefEvidence": {
+        "properties": {
+          "request_id": {
+            "type": "integer",
+            "title": "Request Id"
+          },
+          "quote": {
+            "type": "string",
+            "title": "Quote"
+          }
+        },
+        "type": "object",
+        "required": [
+          "request_id",
+          "quote"
+        ],
+        "title": "BriefEvidence"
+      },
+      "BriefFact": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "display": {
+            "type": "string",
+            "title": "Display"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "value",
+          "display",
+          "kind"
+        ],
+        "title": "BriefFact"
+      },
+      "BriefFactRef": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "display": {
+            "type": "string",
+            "title": "Display"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "display"
+        ],
+        "title": "BriefFactRef"
+      },
+      "BriefImpact": {
+        "properties": {
+          "statement": {
+            "type": "string",
+            "title": "Statement"
+          },
+          "fact_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Fact Keys"
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/BriefFactRef"
+            },
+            "type": "array",
+            "title": "Facts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "statement",
+          "fact_keys",
+          "facts"
+        ],
+        "title": "BriefImpact"
+      },
+      "BriefOptionOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "tradeoffs": {
+            "type": "string",
+            "title": "Tradeoffs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "tradeoffs"
+        ],
+        "title": "BriefOptionOut"
+      },
+      "BriefOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "need_id": {
+            "type": "integer",
+            "title": "Need Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "processing",
+              "ready",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "requested_by": {
+            "type": "string",
+            "title": "Requested By"
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BriefContent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "calls": {
+            "items": {
+              "$ref": "#/components/schemas/BriefCall"
+            },
+            "type": "array",
+            "title": "Calls"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "last_ready": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BriefOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "need_id",
+          "status",
+          "requested_by",
+          "attempts",
+          "error",
+          "content",
+          "calls",
+          "created_at",
+          "finished_at"
+        ],
+        "title": "BriefOut"
+      },
+      "BriefRelatedOut": {
+        "properties": {
+          "need_id": {
+            "type": "integer",
+            "title": "Need Id"
+          },
+          "relation": {
+            "type": "string",
+            "title": "Relation"
+          },
+          "why_it_matters": {
+            "type": "string",
+            "title": "Why It Matters"
+          },
+          "need_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Need Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "need_id",
+          "relation",
+          "why_it_matters"
+        ],
+        "title": "BriefRelatedOut"
+      },
+      "BriefRelatedSection": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "incomplete",
+              "unavailable"
+            ],
+            "title": "Status"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "cap": {
+            "type": "integer",
+            "title": "Cap"
+          },
+          "tool_calls": {
+            "type": "integer",
+            "title": "Tool Calls"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/AgentFinding"
+            },
+            "type": "array",
+            "title": "Findings"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/AgentStep"
+            },
+            "type": "array",
+            "title": "Steps"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "reason",
+          "cap",
+          "tool_calls",
+          "findings",
+          "steps",
+          "model",
+          "prompt_version"
+        ],
+        "title": "BriefRelatedSection"
       },
       "CommitmentFlag": {
         "properties": {

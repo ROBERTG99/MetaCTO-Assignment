@@ -1,7 +1,7 @@
 """API contract types (request bodies and responses). Tables live in models.py."""
 
 from datetime import date, datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
@@ -657,3 +657,137 @@ class PortalNeedDetail(PortalNeedSummary):
     )
     supporters: list[PortalSupporter] = Field(description="Without their reasons, which are theirs to share")
     updates: list[PortalUpdate] = Field(description="Approved updates written to the requester_id asked for")
+
+
+class BriefFact(BaseModel):
+    label: str
+    value: float | int | str | None
+    display: str
+    kind: str  # money | count | score | label
+
+
+class BriefFactRef(BaseModel):
+    key: str
+    label: str
+    display: str
+
+
+class BriefImpact(BaseModel):
+    statement: str
+    fact_keys: list[str]
+    facts: list[BriefFactRef]  # the cited values, rendered by code
+
+
+class BriefEvidence(BaseModel):
+    request_id: int
+    quote: str
+
+
+class BriefRelatedOut(BaseModel):
+    need_id: int
+    relation: str
+    why_it_matters: str
+    need_title: str | None = None
+
+
+class BriefOptionOut(BaseModel):
+    name: str
+    description: str
+    tradeoffs: str
+
+
+class BriefBody(BaseModel):
+    summary: str
+    problem: str
+    who_is_affected: str
+    business_impact: list[BriefImpact]
+    evidence: list[BriefEvidence]
+    related_needs: list[BriefRelatedOut]
+    options: list[BriefOptionOut]
+    recommendation: str
+    confidence: float
+    confidence_rationale: str
+    risks: list[str]
+    open_questions: list[str]
+
+
+class BriefCheck(BaseModel):
+    part: str
+    ok: bool
+    problem: str | None
+
+
+class AgentStep(BaseModel):
+    n: int
+    tool: str
+    args: dict[str, Any]
+    status: Literal["ok", "rejected", "error", "budget"]
+    result_chars: int
+    latency_ms: int
+    ai_run_id: int | None
+    note: str | None
+
+
+class AgentFinding(BaseModel):
+    need_id: int
+    relation: str
+    rationale: str
+    request_id: int
+    quote: str
+    verified: bool
+    problem: str | None
+    need_title: str | None
+
+
+class BriefRelatedSection(BaseModel):
+    status: Literal["complete", "incomplete", "unavailable"]
+    reason: str | None
+    cap: int
+    tool_calls: int
+    findings: list[AgentFinding]
+    steps: list[AgentStep]
+    model: str
+    prompt_version: str
+
+
+class BriefContent(BaseModel):
+    brief: BriefBody
+    facts: dict[str, BriefFact]
+    checks: list[BriefCheck]
+    flagged: int
+    repaired: bool  # the kept version came from the repair round
+    repair_error: str | None = None  # the repair round failed; the first brief is kept, flagged
+    related: BriefRelatedSection
+    runs: list[int]
+    model: str
+    prompt_version: str
+
+
+class BriefCall(BaseModel):
+    """One model call behind the brief, from ai_runs: what it cost and how long it took."""
+
+    id: int
+    step: str
+    model: str
+    prompt_version: str
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_write_tokens: int
+    cost_usd: float
+    latency_ms: int
+    outcome: str
+
+
+class BriefOut(BaseModel):
+    id: int
+    need_id: int
+    status: Literal["pending", "processing", "ready", "failed"]
+    requested_by: str
+    attempts: int
+    error: str | None
+    content: BriefContent | None
+    calls: list[BriefCall]
+    created_at: datetime
+    finished_at: datetime | None
+    last_ready: "BriefOut | None" = None  # the newest ready brief while this one builds or after it failed

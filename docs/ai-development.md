@@ -66,7 +66,7 @@ The AI proposed, compared options and showed evidence; these calls were Robert's
 - **The commitment rule.** Flag timing and promises "unless the PM entered a date".
 - **The process.** The CLAUDE.md rules, the permission scope, and every paid run's go.
 
-One scope call was not his. ADR 0001 planned to drop the overlap agent if time ran short and keep the decision brief (F6), and Robert's rule was the same: "the agent goes and the brief stays". In the end neither was built. That happened by omission as the session moved on to the UI and hardening, not by an explicit decision, and the docs now say so.
+One scope call was first made by omission. ADR 0001 planned to drop the overlap agent if time ran short and keep the decision brief (F6), and Robert's rule was the same: "the agent goes and the brief stays". The first pass built neither, because the session moved on to the UI and hardening, not by an explicit decision. Robert then asked for both (#24): the brief as a workflow and the agent as the one bounded, read-only, verified loop. He leaned towards a manual loop on the plain SDK, and the comparison in [ADR 0012](adr/0012-decision-briefs-bounded-agent-manual-loop.md) agreed.
 
 ## Where the AI got it wrong
 

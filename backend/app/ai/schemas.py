@@ -121,3 +121,80 @@ class UpdateDrafts(BaseModel):
 
     requester_updates: list[RequesterUpdate]
     cs_notes: list[CsNote]
+
+
+Relation = Literal["overlaps", "blocks", "depends_on"]
+
+
+class RelatedFinding(BaseModel):
+    """Another need this one overlaps with, blocks or depends on, with the request that shows it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    need_id: int = Field(description="The related need's id, as returned by the tools")
+    relation: Relation = Field(
+        description="overlaps: same users or problem space; blocks: this need must ship first; "
+        "depends_on: this need needs the other one first"
+    )
+    rationale: str = Field(description="One sentence: why, in terms of the problem")
+    request_id: int = Field(description="A request of the related need, as returned by get_need")
+    quote: str = Field(description="A short passage copied exactly from that request")
+
+
+class RelatedNeeds(BaseModel):
+    """The overlap agent's final answer. Empty when nothing in the backlog is related."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    related: list[RelatedFinding]
+
+
+class EvidenceQuote(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: int = Field(description="A request id from <requests>")
+    quote: str = Field(description="A short passage copied exactly from that request")
+
+
+class ImpactClaim(BaseModel):
+    """A business-impact statement. Figures are cited by fact key and rendered by code, never typed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    statement: str = Field(description="No figures in the text; cite them in fact_keys")
+    fact_keys: list[str] = Field(description="Keys from <facts> whose values support the statement")
+
+
+class BriefRelatedNeed(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    need_id: int = Field(description="An id from <related_needs>")
+    relation: Relation
+    why_it_matters: str
+
+
+class BriefOption(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    description: str
+    tradeoffs: str
+
+
+class DecisionBrief(BaseModel):
+    """A one-page decision brief for a PM. The decision stays human; this only frames it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    summary: str
+    problem: str
+    who_is_affected: str
+    business_impact: list[ImpactClaim]
+    evidence: list[EvidenceQuote]
+    related_needs: list[BriefRelatedNeed]
+    options: list[BriefOption]
+    recommendation: str
+    confidence: float = Field(ge=0, le=1)
+    confidence_rationale: str
+    risks: list[str]
+    open_questions: list[str]

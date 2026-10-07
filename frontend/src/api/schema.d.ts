@@ -150,6 +150,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/needs/{need_id}/brief": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The newest decision brief for a need, with its checks, the agent's steps and the model calls */
+        get: operations["get_brief_needs__need_id__brief_get"];
+        put?: never;
+        /**
+         * Ask for a decision brief (the worker builds it; spends model calls in live mode)
+         * @description 202 with the queued brief. A brief already waiting for this need is returned instead of a second one. The overlap agent (read-only, at most 8 tool calls) runs first; the brief is verified in code.
+         */
+        post: operations["ask_for_brief_needs__need_id__brief_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/triage": {
         parameters: {
             query?: never;
@@ -440,6 +461,49 @@ export interface components {
             /** Renewal Date */
             renewal_date: string | null;
         };
+        /** AgentFinding */
+        AgentFinding: {
+            /** Need Id */
+            need_id: number;
+            /** Relation */
+            relation: string;
+            /** Rationale */
+            rationale: string;
+            /** Request Id */
+            request_id: number;
+            /** Quote */
+            quote: string;
+            /** Verified */
+            verified: boolean;
+            /** Problem */
+            problem: string | null;
+            /** Need Title */
+            need_title: string | null;
+        };
+        /** AgentStep */
+        AgentStep: {
+            /** N */
+            n: number;
+            /** Tool */
+            tool: string;
+            /** Args */
+            args: {
+                [key: string]: unknown;
+            };
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "rejected" | "error" | "budget";
+            /** Result Chars */
+            result_chars: number;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Ai Run Id */
+            ai_run_id: number | null;
+            /** Note */
+            note: string | null;
+        };
         /** AuditEvent */
         AuditEvent: {
             /**
@@ -463,6 +527,200 @@ export interface components {
             request_id?: number | null;
             /** Model */
             model?: string | null;
+        };
+        /** BriefBody */
+        BriefBody: {
+            /** Summary */
+            summary: string;
+            /** Problem */
+            problem: string;
+            /** Who Is Affected */
+            who_is_affected: string;
+            /** Business Impact */
+            business_impact: components["schemas"]["BriefImpact"][];
+            /** Evidence */
+            evidence: components["schemas"]["BriefEvidence"][];
+            /** Related Needs */
+            related_needs: components["schemas"]["BriefRelatedOut"][];
+            /** Options */
+            options: components["schemas"]["BriefOptionOut"][];
+            /** Recommendation */
+            recommendation: string;
+            /** Confidence */
+            confidence: number;
+            /** Confidence Rationale */
+            confidence_rationale: string;
+            /** Risks */
+            risks: string[];
+            /** Open Questions */
+            open_questions: string[];
+        };
+        /**
+         * BriefCall
+         * @description One model call behind the brief, from ai_runs: what it cost and how long it took.
+         */
+        BriefCall: {
+            /** Id */
+            id: number;
+            /** Step */
+            step: string;
+            /** Model */
+            model: string;
+            /** Prompt Version */
+            prompt_version: string;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Cache Read Tokens */
+            cache_read_tokens: number;
+            /** Cache Write Tokens */
+            cache_write_tokens: number;
+            /** Cost Usd */
+            cost_usd: number;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Outcome */
+            outcome: string;
+        };
+        /** BriefCheck */
+        BriefCheck: {
+            /** Part */
+            part: string;
+            /** Ok */
+            ok: boolean;
+            /** Problem */
+            problem: string | null;
+        };
+        /** BriefContent */
+        BriefContent: {
+            brief: components["schemas"]["BriefBody"];
+            /** Facts */
+            facts: {
+                [key: string]: components["schemas"]["BriefFact"];
+            };
+            /** Checks */
+            checks: components["schemas"]["BriefCheck"][];
+            /** Flagged */
+            flagged: number;
+            /** Repaired */
+            repaired: boolean;
+            /** Repair Error */
+            repair_error?: string | null;
+            related: components["schemas"]["BriefRelatedSection"];
+            /** Runs */
+            runs: number[];
+            /** Model */
+            model: string;
+            /** Prompt Version */
+            prompt_version: string;
+        };
+        /** BriefEvidence */
+        BriefEvidence: {
+            /** Request Id */
+            request_id: number;
+            /** Quote */
+            quote: string;
+        };
+        /** BriefFact */
+        BriefFact: {
+            /** Label */
+            label: string;
+            /** Value */
+            value: number | string | null;
+            /** Display */
+            display: string;
+            /** Kind */
+            kind: string;
+        };
+        /** BriefFactRef */
+        BriefFactRef: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Display */
+            display: string;
+        };
+        /** BriefImpact */
+        BriefImpact: {
+            /** Statement */
+            statement: string;
+            /** Fact Keys */
+            fact_keys: string[];
+            /** Facts */
+            facts: components["schemas"]["BriefFactRef"][];
+        };
+        /** BriefOptionOut */
+        BriefOptionOut: {
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            /** Tradeoffs */
+            tradeoffs: string;
+        };
+        /** BriefOut */
+        BriefOut: {
+            /** Id */
+            id: number;
+            /** Need Id */
+            need_id: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "processing" | "ready" | "failed";
+            /** Requested By */
+            requested_by: string;
+            /** Attempts */
+            attempts: number;
+            /** Error */
+            error: string | null;
+            content: components["schemas"]["BriefContent"] | null;
+            /** Calls */
+            calls: components["schemas"]["BriefCall"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Finished At */
+            finished_at: string | null;
+            last_ready?: components["schemas"]["BriefOut"] | null;
+        };
+        /** BriefRelatedOut */
+        BriefRelatedOut: {
+            /** Need Id */
+            need_id: number;
+            /** Relation */
+            relation: string;
+            /** Why It Matters */
+            why_it_matters: string;
+            /** Need Title */
+            need_title?: string | null;
+        };
+        /** BriefRelatedSection */
+        BriefRelatedSection: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "complete" | "incomplete" | "unavailable";
+            /** Reason */
+            reason: string | null;
+            /** Cap */
+            cap: number;
+            /** Tool Calls */
+            tool_calls: number;
+            /** Findings */
+            findings: components["schemas"]["AgentFinding"][];
+            /** Steps */
+            steps: components["schemas"]["AgentStep"][];
+            /** Model */
+            model: string;
+            /** Prompt Version */
+            prompt_version: string;
         };
         /** CommitmentFlag */
         CommitmentFlag: {
@@ -2069,6 +2327,99 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StatusChangeOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_brief_needs__need_id__brief_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                need_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    ask_for_brief_needs__need_id__brief_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                need_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Decision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefOut"];
                 };
             };
             /** @description Not Found */

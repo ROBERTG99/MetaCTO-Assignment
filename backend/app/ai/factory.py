@@ -29,7 +29,12 @@ def make_client(settings: Settings) -> LLMClient:
     """The provider client for AI_MODE. In APP_ENV=test only, wrapped so marked text fails (e2e failure path)."""
     key = settings.anthropic_api_key.get_secret_value() if settings.anthropic_api_key else None
     client: LLMClient = (
-        AnthropicClient(settings.llm_timeout_seconds, settings.llm_max_retries, api_key=key)
+        AnthropicClient(
+            settings.llm_timeout_seconds,
+            settings.llm_max_retries,
+            api_key=key,
+            step_timeouts={"decision_brief": 180.0},  # up to 12k output tokens at about 90 tokens/s
+        )
         if settings.ai_mode == "live"
         else OfflineClient()
     )
@@ -51,6 +56,15 @@ def build_deps(engine: Engine, config: Path = CONFIG) -> Deps:
         ),
         "strategic_fit": StepConfig(model[priorities.fit_model], 1500),
         "stakeholder_update": StepConfig(settings.fast_model if live else "offline-baseline", 3000),
+        # the overlap agent navigates search results; its findings are checked in code (ADR 0012)
+        "related_needs": StepConfig(settings.fast_model if live else "offline-baseline", 2000),
+        # the brief's system prompt is static and above Sonnet 5.5's minimum cacheable prefix, so it is cached
+        "decision_brief": StepConfig(
+            settings.smart_model if live else "offline-baseline",
+            12_000,
+            "medium" if live else None,
+            cache=live,
+        ),
     }
     prices = yaml.safe_load((config / "prices.yaml").read_text(encoding="utf-8"))
     gateway = Gateway(client=client, steps=steps, prices=prices, record=recorder(engine))

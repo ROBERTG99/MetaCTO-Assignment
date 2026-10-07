@@ -11,7 +11,7 @@ flowchart LR
   end
   subgraph API["FastAPI process"]
     Routes["app/api<br/>thin routes"]
-    Services["app/services<br/>requests, needs, triage, priority,<br/>updates, portal, metrics"]
+    Services["app/services<br/>requests, needs, triage, priority,<br/>updates, briefs, portal, metrics"]
     Worker["worker loop<br/>(started in lifespan)"]
     Pipeline["app/ai/pipeline.py<br/>redact, embed, retrieve, extract,<br/>adjudicate, route, enrich, score"]
     Scoring["app/scoring.py<br/>routing and priority math"]
@@ -91,22 +91,23 @@ sequenceDiagram
   Note over W,DB: On startup, every processing row goes back to pending (lease 0: one process).
 ```
 
-## Decision brief with the overlap agent (designed, not built)
+## Decision brief with the overlap agent
 
-Not built: the brief (F6) and its overlap agent were cut for time, so the product has no agent (ADR 0001 outcome). The design is kept for the production path.
+Built in #24 ([ADR 0012](adr/0012-decision-briefs-bounded-agent-manual-loop.md)); code in `app/ai/brief.py`, `app/services/briefs.py`.
 
 ```mermaid
 flowchart TD
-  A["PM: Generate brief for need N"] --> B["brief row queued (pending)"]
-  B --> C["Gather facts in code:<br/>need, requests, supports, accounts,<br/>D/U/S components, goals"]
-  C --> D{"Overlap agent enabled?"}
-  D -- yes --> E["Agent loop (gateway.agent_step)<br/>read-only tools: search_needs, get_need, list_requests<br/>step cap 8, no write tools"]
-  E --> F["Verify findings in code:<br/>need ids exist, quotes found verbatim"]
-  F --> G
-  D -- "no (time cut)" --> G["One LLM call (gateway.brief)<br/>facts and findings inside XML tags,<br/>structured claims with source id, quote, number"]
-  G --> H["Verify in code:<br/>each quote is in its cited source,<br/>each number equals a value in the facts table"]
-  H --> I["Store brief: verified claims shown,<br/>unverified claims flagged, ai_run ids"]
-  I --> J["PM reads it; status decisions stay human"]
+  A["PM: Brief me (POST /needs/N/brief)"] --> B["brief row queued (pending); 202"]
+  B --> C["Worker: gather facts in code<br/>need, requests, accounts, ARR, pipeline,<br/>renewals, D/U/S, goals"]
+  C --> E["Overlap agent: manual loop<br/>gateway.related_needs_turn per turn (Haiku)<br/>strict read-only tools: search_needs, get_need, get_trend<br/>cap 8 tool calls, 90 s; other tools rejected unrun"]
+  E --> F["Verify findings in code:<br/>need live and not itself, request belongs to it,<br/>quote verbatim; failures flagged, not passed on"]
+  E -- "fails or times out" --> G
+  F --> G["One call: gateway.decision_brief (Sonnet, medium,<br/>cached system prompt); facts as keyed values,<br/>requests and verified findings inside XML tags"]
+  G --> H["Verify in code: quotes verbatim, fact keys exist,<br/>money figures equal a fact, related needs verified"]
+  H -- "a claim fails" --> R["One repair round naming the claims"] --> H2["Verify again; still failing: shown flagged,<br/>invented figures removed"]
+  H --> I
+  H2 --> I["Store: brief, facts, checks, trajectory, ai_run ids"]
+  I --> J["PM reads it with How this brief was built;<br/>status decisions stay human"]
 ```
 
-The brief is a workflow, because its inputs are known in advance. The agent is the only step whose path isn't known ahead of time: which needs to search for depends on what it finds. That is why it would have been the only agent (ADR 0001).
+The brief is a workflow, because its inputs are known in advance. The agent is the only step whose path isn't known ahead of time: which need to read next depends on what the last search found. That is why it is the only agent (ADR 0001). Offline, the agent step is a labelled baseline (one search, the nearest need) and the brief a template of the facts and quotes.

@@ -4,7 +4,7 @@ from datetime import UTC, date, datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import JSON, Column, UniqueConstraint
+from sqlalchemy import JSON, Column, Index, UniqueConstraint, text
 from sqlmodel import Field, SQLModel
 
 
@@ -224,6 +224,8 @@ class AIRun(SQLModel, table=True):
     prompt_version: str
     input_tokens: int = 0
     output_tokens: int = 0
+    cache_read_tokens: int = 0  # cached input read at a tenth of the input price
+    cache_write_tokens: int = 0  # input written to the cache at 1.25x the input price
     cost_usd: float = 0.0
     latency_ms: int = 0
     outcome: str  # ok | refusal | max_tokens | validation_error | provider_error | timeout
@@ -311,3 +313,29 @@ class OutboxMessage(SQLModel, table=True):
     subject: str
     body: str
     created_at: datetime = Field(default_factory=utcnow)
+
+
+class Brief(SQLModel, table=True):
+    """A decision brief for one need (F6), asked for by a PM. The row is its own job (ADR 0007):
+    pending -> processing -> ready, or failed with the reason. Briefs are never updated once ready;
+    asking again adds a row, and the newest one is shown. At most one brief per need waits at a time."""
+
+    __table_args__ = (
+        Index(
+            "uq_brief_waiting",
+            "need_id",
+            unique=True,
+            sqlite_where=text("status IN ('pending', 'processing')"),
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    need_id: int = Field(foreign_key="need.id", index=True)
+    requested_by: str
+    status: str = "pending"  # pending | processing | ready | failed
+    attempts: int = 0
+    started_at: datetime | None = None
+    error: str | None = None
+    content: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=utcnow, index=True)
+    finished_at: datetime | None = None

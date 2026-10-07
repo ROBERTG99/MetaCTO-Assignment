@@ -22,6 +22,7 @@ from app.ai.gateway import TerminalError, TransientError
 from app.ai.pipeline import Deps, dispute_claim, process_claim, process_fit, process_request
 from app.models import (
     AIRun,
+    Brief,
     Need,
     NeedStatus,
     NeedStatusChange,
@@ -32,6 +33,8 @@ from app.models import (
     utcnow,
 )
 from app.observability import request_id
+from app.services.briefs import process_brief
+from app.services.briefs import trace_id as brief_trace
 from app.services.updates import process_drafts
 
 log = logging.getLogger("distill.worker")
@@ -41,6 +44,7 @@ log = logging.getLogger("distill.worker")
 class WorkerConfig:
     max_attempts: int = 3
     lease_seconds: int = 600  # above the worst case: 30 s x 3 SDK tries x 2 gateway tries x 2 steps
+    brief_lease_seconds: int = 3600  # a brief is up to 9 agent turns plus brief calls with a 180 s timeout
     reclaim_every_seconds: float = 60.0
     backoff_base_seconds: float = 5.0
     daily_budget_usd: float | None = (
@@ -85,10 +89,18 @@ class Worker:
             for r in stale:
                 r.status = RequestStatus.pending
                 s.add(r)
+            brief_cutoff = now - timedelta(
+                seconds=self.cfg.brief_lease_seconds if lease_seconds is None else lease
+            )
+            briefs = s.exec(select(Brief).where(Brief.status == "processing")).all()
+            stuck = [b for b in briefs if b.started_at is None or _aware(b.started_at) <= brief_cutoff]
+            for b in stuck:
+                b.status = "pending"
+                s.add(b)
             s.commit()
-        if stale:
-            log.warning("reclaimed %d request(s) left in processing", len(stale))
-        return len(stale)
+        if stale or stuck:
+            log.warning("reclaimed %d request(s) and %d brief(s) left in processing", len(stale), len(stuck))
+        return len(stale) + len(stuck)
 
     def spent_today(self, now: datetime) -> float:
         midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -152,6 +164,19 @@ class Worker:
                 with traced(f"status-change-{change.id}"):
                     self._drafts(s, change.id)
                 return f"drafts:{change.id}"
+            asked = s.exec(
+                select(Brief).where(Brief.status == "pending").order_by(col(Brief.created_at), col(Brief.id))
+            ).all()
+            brief = next((x for x in asked if self._ready(x.attempts, x.started_at, now)), None)
+            if (
+                brief is not None and brief.id is not None
+            ):  # offline mode briefs from the baseline and a template
+                brief.status, brief.attempts, brief.started_at = "processing", brief.attempts + 1, now
+                s.add(brief)
+                s.commit()
+                with traced(brief_trace(brief.id)):
+                    self._brief(s, brief.id)
+                return f"brief:{brief.id}"
             if self.deps.mode != "llm":
                 return None
             due = s.exec(
@@ -187,6 +212,24 @@ class Worker:
             else:  # the status stands; the PM writes the messages, or retries later
                 change.drafts_status, change.drafts_error = "failed", reason
             s.add(change)
+            s.commit()
+
+    def _brief(self, s: Session, brief_id: int) -> None:
+        try:
+            process_brief(s, brief_id, self.deps)
+        except Exception as exc:  # transient errors retry with backoff; anything else fails the brief now
+            s.rollback()
+            b = s.get(Brief, brief_id)
+            assert b is not None
+            transient = isinstance(exc, TransientError)
+            reason = (
+                str(exc)
+                if isinstance(exc, TransientError | TerminalError)
+                else f"internal error: {type(exc).__name__}: {exc}"
+            )
+            b.error = reason
+            b.status = "pending" if transient and b.attempts < self.cfg.max_attempts else "failed"
+            s.add(b)
             s.commit()
 
     def _fit(self, s: Session, need_id: int) -> None:

@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { SEGMENT, SEVERITY, SUPPORT_STATUS, humanize, money, score, sourceLabel, when } from '@/lib/labels'
 
+import { DecisionBriefPanel } from './brief'
 import { BreakdownView } from './breakdown'
 import { ChangeStatusDialog, StakeholderUpdates } from './updates'
 
@@ -76,6 +77,10 @@ export function PmNeedPage() {
         }
         actions={<ChangeStatusDialog needId={id} current={n.status} disabled={merged} />}
       />
+
+      <Section title="Decision brief">
+        <DecisionBriefPanel needId={id} disabled={merged} />
+      </Section>
 
       <Section title="Stakeholder updates">
         <StakeholderUpdates needId={id} />

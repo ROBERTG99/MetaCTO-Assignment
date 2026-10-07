@@ -1,7 +1,7 @@
 // PM-workspace queries and mutations. They reuse the shared `keys`, so the requester half sees the same cache.
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 
-import { api, unwrap, type Schemas } from '@/api/client'
+import { ApiError, api, unwrap, type Schemas } from '@/api/client'
 import { keys } from '@/api/queries'
 import { PM_NAME } from '@/app/session-constants'
 
@@ -105,5 +105,35 @@ export function useNeedUpdates(needId: number) {
       unwrap(await api.GET('/needs/{need_id}/updates', { params: { path: { need_id: needId } } })),
     // poll while the worker is drafting, so drafts appear without a reload
     refetchInterval: (q) => (q.state.data?.changes.some((c) => c.drafts_status === 'pending') ? 1500 : false),
+  })
+}
+
+export type BriefOut = Schemas['BriefOut']
+
+const BRIEF_POLL_MS = 1500
+
+/** The newest brief for a need, or null when there is none yet. Polls while the worker builds it. */
+export function useBrief(needId: number) {
+  return useQuery({
+    queryKey: keys.brief(needId),
+    queryFn: async (): Promise<BriefOut | null> => {
+      try {
+        return unwrap(await api.GET('/needs/{need_id}/brief', { params: { path: { need_id: needId } } }))
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 404) return null
+        throw e
+      }
+    },
+    refetchInterval: (q) => (q.state.data && ['pending', 'processing'].includes(q.state.data.status) ? BRIEF_POLL_MS : false),
+  })
+}
+
+/** Ask for a brief. The server returns one already waiting instead of queueing a second. */
+export function useAskBrief(needId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async () =>
+      unwrap(await api.POST('/needs/{need_id}/brief', { params: { path: { need_id: needId } }, body: { by: PM_NAME } })),
+    onSuccess: (brief) => qc.setQueryData(keys.brief(needId), brief),
   })
 }

@@ -163,3 +163,59 @@ def test_an_unpriced_model_is_an_error_not_a_free_call(deps: Deps, fake_llm: Fak
     deps.gateway.steps["extract"] = StepConfig("claude-unknown-9", 2000)
     with pytest.raises(KeyError, match="price"):
         deps.gateway.extract(text="x", why=None, role=None)
+
+
+def test_cached_tokens_are_recorded_and_costed_at_their_rates(
+    deps: Deps, fake_llm: FakeLLM, engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.ai.gateway import Reply, Usage
+
+    usage = Usage(1000, 200, cache_read_input_tokens=3000, cache_creation_input_tokens=800)
+    monkeypatch.setattr(fake_llm, "complete", lambda **_k: Reply(GOOD, usage, "claude-haiku-4-5"))
+    deps.gateway.extract(text="x", why=None, role=None)
+    [run] = runs(engine)
+    assert (run.cache_read_tokens, run.cache_write_tokens) == (3000, 800)
+    # reads at 0.1x the input price, writes at 1.25x (claude-api skill, prompt caching)
+    assert run.cost_usd == pytest.approx((1000 * 1.0 + 800 * 1.25 + 3000 * 0.1 + 200 * 5.0) / 1e6)
+
+
+def test_a_step_configured_to_cache_asks_the_client_to(
+    deps: Deps, fake_llm: FakeLLM, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.ai.gateway import Reply, Usage
+
+    seen: list[bool] = []
+
+    def complete(**kw: object) -> Reply:
+        seen.append(bool(kw.get("cache")))
+        return Reply(GOOD, Usage(1, 1), "claude-haiku-4-5")
+
+    monkeypatch.setattr(fake_llm, "complete", complete)
+    deps.gateway.extract(text="x", why=None, role=None)
+    deps.gateway.steps["extract"] = StepConfig("claude-haiku-4-5", 2000, cache=True)
+    deps.gateway.extract(text="x", why=None, role=None)
+    assert seen == [False, True]
+
+
+def test_an_agent_turn_is_recorded_and_a_refusal_is_terminal(
+    deps: Deps, fake_llm: FakeLLM, engine: Engine
+) -> None:
+    from app.ai.brief import TOOLS
+    from app.ai.schemas import RelatedNeeds
+
+    need: dict[str, object] = {
+        "title": "t",
+        "problem": "p",
+        "persona": None,
+        "product_area": None,
+        "requests": [],
+    }
+    turn, run_id = deps.gateway.related_needs_turn(need=need, transcript=[], tools=TOOLS, allow_tools=True)
+    assert turn.output == RelatedNeeds(related=[]) and run_id == runs(engine)[0].id
+    fake_llm.script("related_needs", Refused("cyber"))
+    with pytest.raises(TerminalError):
+        deps.gateway.related_needs_turn(need=need, transcript=[], tools=TOOLS, allow_tools=True)
+    assert [(r.step, r.prompt_version, r.outcome) for r in runs(engine)] == [
+        ("related_needs", "related_needs_v1", "ok"),
+        ("related_needs", "related_needs_v1", "refusal"),
+    ]

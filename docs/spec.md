@@ -23,7 +23,7 @@ Distill turns every request, as it arrives, into a deduplicated, need-centric, e
 | PM (triage owner) | Reads every request, searches by keyword, merges by hand | Reviews only the gray zone, disputes, failures and a 10% audit sample |
 | Requester (customer, CS, sales, internal) | Submits into a void; duplicates are invisible | Sees existing needs while typing; adding support takes one click and their "why" counts as evidence |
 | CS and sales | Can't see which of their accounts want what | Sees the accounts and revenue behind each need, and renewals at risk |
-| Product leader | Gets vote counts, or opinions | Gets demand, urgency and strategic fit shown separately, and, in the design, a verified decision brief (F6, not built) |
+| Product leader | Gets vote counts, or opinions | Gets demand, urgency and strategic fit shown separately, and a decision brief whose quotes and figures are verified in code (F6) |
 
 ## 3. Workflow before and after
 
@@ -48,7 +48,7 @@ Must = the golden path and is built first. Should = built only after the golden 
 | F3 | **Confidence policy.** Routing score (section 8) produces: auto-link (labelled, undoable, 10% audit sample), suggestion in the inbox, or new need. A requester-claimed link is confirmed or disputed. | must | Unit tests (routing, policy, audit sampling); threshold choice in evals/REPORT.md; metric M4; e2e GP3 |
 | F4 | **Prioritization** (ADR 0009). Demand, urgency, strategic fit and priority are computed in code when a need is read, with every component in the breakdown (must). Strategic fit is rated per goal by the model (strategic_fit_v1) against the goals in config/priorities.yaml, with the quote verified in code (should). Popular and strategic are shown separately, in the breakdown and in `GET /insights/quadrant`; each need is routed to the PM team owning its product area. | must (computed) / should (fit) | `unit/test_scoring.py`, `api/test_priority_api.py`, `unit/test_strategic_fit.py` (passing); strategic-fit agreement pending human labels (the eval hasn't run); e2e GP4 |
 | F5 | **PM triage inbox.** Action tabs, audit sample first (at the locked threshold the gray zone is small, so the audit is most of the review work): Audit sample, Suggestions, Claim disagreements, Needs review (AI failed). Keyboard: j/k move, a accepts, r rejects (a held key never decides twice). A read-only Auto-linked tab lists every auto-link with an undo button and requires no action (CLAUDE.md rule 2). Both texts side by side, with accept, reject and undo (built); link manually, new need and merge needs are not built, so leakage (M2) stays 0. | must | `api/test_triage_api.py` (each transition in §5; links never deleted); e2e GP3; metric: suggestion acceptance rate |
-| F6 | **Decision brief.** A workflow: gather the facts, make one LLM call, verify every quote and number in code. An optional **overlap agent** finds needs this one overlaps with, blocks or depends on, using read-only search tools and a step cap; its findings feed the brief as cited evidence. If time runs short, the agent is dropped and the brief stays. | should (not built: cut for time) | Not built. Only the quote verifier exists (`verify_quotes`, used by adjudication and strategic fit) |
+| F6 | **Decision brief.** A workflow: gather the facts, make one LLM call, verify in code every quote, fact key, money figure and related need (counts in prose are not checked). An optional **overlap agent** finds needs this one overlaps with, blocks or depends on, using read-only search tools and a step cap; its findings feed the brief as cited evidence. As built ([ADR 0012](adr/0012-decision-briefs-bounded-agent-manual-loop.md)): `POST /needs/{id}/brief` queues a job; the agent (Haiku, tools `search_needs`, `get_need`, `get_trend`, at most 8 tool calls, 90 s) runs first; the brief (Sonnet, medium effort) gets figures as keyed facts; one repair round; failing claims shown flagged; "How this brief was built" shows every step and call. | should (built) | `unit/test_brief.py` (agent cap, read-only tools, cited and verbatim findings, money from the data, repair round, agent failure and timeout, trajectory; passing), `api/test_briefs_api.py` (passing), e2e GP7; live: [docs/examples/brief-sso.md](examples/brief-sso.md) (0 of 28 claims flagged, $0.043) |
 | F7 | **Close the loop** ([ADR 0010](adr/0010-stakeholder-updates-ai-drafts-code-checks-pm-approves.md)). `PATCH /needs/{id}/status` takes a status, the PM's reason and an optional date, and saves at once. The worker then drafts (stakeholder_update_v1, FAST_MODEL; offline: a template) a personal update per supporter that refers to what they asked for, and a CS note per affected account. Code flags dates, timing and delivery promises the PM didn't make; approval re-checks and refuses while flagged. Approved messages go to a simulated outbox and the requester's need page, and each personal approval marks that supporter notified. | should (built) | `unit/test_commitments.py`, `api/test_updates_api.py` (passing); e2e GP5 `frontend/e2e/stakeholder-updates.spec.ts` (passing); metric M3 |
 | F8 | **Metrics and AI Ops view.** Metrics M1-M4 and the guardrails (acceptance, needs-review rate, queue health), plus a summary of ai_runs: cost per request, p50/p95 latency per step, failure rate, by model and prompt version. | must | `api/test_workspace_api.py` (M1, M2, M4, queue), `api/test_updates_api.py` (M3); e2e GP5 checks M3 on the AI Ops page |
 
@@ -192,8 +192,8 @@ Assumptions (estimates; measured values from ai_runs replace them):
 
 Per need (should flows):
 - Strategic fit: 1 call, about $0.01.
-- Brief (not built): 1 call, about $0.03.
-- Overlap agent (not built): at most 8 turns, about $0.10 at the cap.
+- Brief: usually 1 call, 2 with a repair round; the worst case is 6 (a schema repair and a max_tokens retry on each of the two logical calls), and a transient failure re-runs the job up to 3 times. The live SSO brief's call cost $0.031 on Sonnet 5.5.
+- Overlap agent: at most 9 Haiku turns (8 tool calls plus the answer); the live SSO run took 3 turns for $0.012.
 
 At about 2,000 requests a month, the most expensive config costs about $46. That is small next to PM time (assumption A6: about 67 hours at 2 minutes per request). **Model choice is therefore decided on false merges and gray-zone size, not on price.**
 
@@ -225,7 +225,7 @@ Further guardrails shown in F8:
 | Local embeddings miss paraphrases | recall@5 is its own metric; switch to Voyage below 90% (ADR 0002) |
 | "The richest customer wins" | Log-scaled demand; popular and strategic shown separately; the PM decides status |
 | Cost runaway | max_tokens per step, ai_runs cost in F8, per-client rate limits on `POST /requests` and support plus a write budget, and a daily model-spend ceiling the worker checks before claiming a job (ADR 0011). |
-| Scope vs the 2-3 h guidance | Must and should levels; the agent and the decision brief (F6) were not built |
+| Scope vs the 2-3 h guidance | Must and should levels; the decision brief and its agent (F6) were built late (#24), with no eval yet |
 
 ## 12. Non-goals
 
