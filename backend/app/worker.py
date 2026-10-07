@@ -10,15 +10,18 @@ them, and their dead end is "failed", which leaves the ratings in use unchanged.
 import asyncio
 import logging
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.engine import Engine
-from sqlmodel import Session, col, select
+from sqlmodel import Session, col, func, select
 
 from app.ai.gateway import TerminalError, TransientError
 from app.ai.pipeline import Deps, dispute_claim, process_claim, process_fit, process_request
 from app.models import (
+    AIRun,
     Need,
     NeedStatus,
     NeedStatusChange,
@@ -28,6 +31,7 @@ from app.models import (
     SupportLinkStatus,
     utcnow,
 )
+from app.observability import request_id
 from app.services.updates import process_drafts
 
 log = logging.getLogger("distill.worker")
@@ -39,6 +43,19 @@ class WorkerConfig:
     lease_seconds: int = 600  # above the worst case: 30 s x 3 SDK tries x 2 gateway tries x 2 steps
     reclaim_every_seconds: float = 60.0
     backoff_base_seconds: float = 5.0
+    daily_budget_usd: float | None = (
+        None  # stop claiming jobs once today's model spend reaches this (live only)
+    )
+
+
+@contextmanager
+def traced(rid: str) -> Iterator[None]:
+    """Run a queue job under a request ID, so its logs and ai_runs can be traced back."""
+    token = request_id.set(rid)
+    try:
+        yield
+    finally:
+        request_id.reset(token)
 
 
 def _aware(t: datetime) -> datetime:
@@ -73,8 +90,26 @@ class Worker:
             log.warning("reclaimed %d request(s) left in processing", len(stale))
         return len(stale)
 
+    def spent_today(self, now: datetime) -> float:
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        with Session(self.engine) as s:
+            total = s.exec(select(func.sum(AIRun.cost_usd)).where(col(AIRun.created_at) >= midnight)).one()
+        return float(total or 0.0)
+
+    def over_budget(self, now: datetime) -> bool:
+        """A spend ceiling, so a flood of submissions or toggled statuses can't run up the bill: jobs wait
+        (nothing is lost) until the next UTC day or a higher budget. Offline mode costs nothing."""
+        if self.deps.mode != "llm" or self.cfg.daily_budget_usd is None:
+            return False
+        if self.spent_today(now) < self.cfg.daily_budget_usd:
+            return False
+        log.warning("daily model budget reached (%.2f USD); jobs wait", self.cfg.daily_budget_usd)
+        return True
+
     def run_once(self, now: datetime | None = None) -> str | None:
         now = now or utcnow()
+        if self.over_budget(now):
+            return None
         with Session(self.engine) as s:
             pending = s.exec(
                 select(Request)
@@ -86,7 +121,8 @@ class Worker:
                 r.status, r.attempts, r.claimed_at = RequestStatus.processing, r.attempts + 1, now
                 s.add(r)
                 s.commit()
-                self._request(s, r.id)
+                with traced(r.trace_id or f"request-{r.id}"):  # the submission's request ID, into its ai_runs
+                    self._request(s, r.id)
                 return f"request:{r.id}"
             claims = s.exec(
                 select(Support)
@@ -98,7 +134,8 @@ class Worker:
                 sup.check_attempts, sup.check_started_at = sup.check_attempts + 1, now
                 s.add(sup)
                 s.commit()
-                self._claim(s, sup.id)
+                with traced(f"claim-{sup.id}"):
+                    self._claim(s, sup.id)
                 return f"claim:{sup.id}"
             changes = s.exec(
                 select(NeedStatusChange)
@@ -112,7 +149,8 @@ class Worker:
                 change.drafts_attempts, change.drafts_started_at = change.drafts_attempts + 1, now
                 s.add(change)
                 s.commit()
-                self._drafts(s, change.id)
+                with traced(f"status-change-{change.id}"):
+                    self._drafts(s, change.id)
                 return f"drafts:{change.id}"
             if self.deps.mode != "llm":
                 return None
@@ -126,7 +164,8 @@ class Worker:
                 need.fit_attempts, need.fit_started_at = need.fit_attempts + 1, now
                 s.add(need)
                 s.commit()
-                self._fit(s, need.id)
+                with traced(f"fit-{need.id}"):
+                    self._fit(s, need.id)
                 return f"fit:{need.id}"
         return None
 

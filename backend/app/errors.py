@@ -14,10 +14,16 @@ log = logging.getLogger("distill")
 
 class AppError(Exception):
     def __init__(
-        self, status: int, code: str, message: str, details: list[dict[str, Any]] | None = None
+        self,
+        status: int,
+        code: str,
+        message: str,
+        details: list[dict[str, Any]] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         super().__init__(message)
         self.status, self.code, self.message, self.details = status, code, message, details or []
+        self.headers = headers
 
 
 def not_found(what: str, ident: int) -> AppError:
@@ -42,7 +48,9 @@ async def _validation(_req: Request, exc: Exception) -> JSONResponse:
 
 async def _app_error(_req: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, AppError)
-    return JSONResponse(error_body(exc.code, exc.message, exc.details), status_code=exc.status)
+    return JSONResponse(
+        error_body(exc.code, exc.message, exc.details), status_code=exc.status, headers=exc.headers
+    )
 
 
 async def _http_error(_req: Request, exc: Exception) -> JSONResponse:

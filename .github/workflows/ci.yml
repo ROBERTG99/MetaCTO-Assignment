@@ -1,0 +1,123 @@
+# CI: everything runs offline (AI_MODE=offline, no API key), so it is free and deterministic.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  AI_MODE: offline
+  LOG_FORMAT: text
+
+jobs:
+  backend:
+    name: Backend (ruff, mypy, pytest, hooks, eval gate, audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0 # the frozen test set is checked against git history
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: "0.11.8"
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: backend/.cache
+          key: fastembed-bge-small-en-v1.5
+      - name: Install dependencies and the embedding model
+        run: make setup-backend
+      - name: Ruff (lint and format)
+        run: make lint
+      - name: Mypy (strict)
+        run: make typecheck
+      - name: Pytest
+        run: make test
+      - name: Hook tests (ruff required)
+        run: |
+          git config --global user.email ci@example.com
+          git config --global user.name CI
+          make check-hooks
+      - name: Offline eval gate (baseline on dev and test; free)
+        run: make eval-gate
+        env:
+          HF_HUB_OFFLINE: "1"
+      - name: Dependency audit (Python)
+        run: cd backend && uv export --no-dev --format requirements-txt --no-emit-project > req.txt && uvx pip-audit==2.10.1 -r req.txt --disable-pip
+
+  frontend:
+    name: Frontend (typecheck, build, audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - name: Typecheck
+        run: npm run typecheck
+        working-directory: frontend
+      - name: Build
+        run: npm run build
+        working-directory: frontend
+      - name: Dependency audit (production dependencies)
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: frontend
+
+  e2e:
+    name: End-to-end (Playwright, offline)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: "0.11.8"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: backend/.cache
+          key: fastembed-bge-small-en-v1.5
+      - name: Install backend, embedding model and web app
+        run: |
+          make setup-backend
+          cd frontend && npm ci && npx playwright install --with-deps chromium
+      - name: Golden paths
+        run: make e2e
+        env:
+          CI: "true"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          retention-days: 7

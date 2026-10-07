@@ -12,6 +12,7 @@ export default defineConfig({
   server: {
     port: Number(process.env.WEB_PORT ?? 5173),
     strictPort: true,
-    proxy: { '/api': { target: api, changeOrigin: true, rewrite: (p) => p.replace(/^\/api/, '') } },
+    // xfwd: the API sees the browser's address (X-Forwarded-For), so per-client rate limits aren't shared by everyone
+    proxy: { '/api': { target: api, changeOrigin: true, xfwd: true, rewrite: (p) => p.replace(/^\/api/, '') } },
   },
 })

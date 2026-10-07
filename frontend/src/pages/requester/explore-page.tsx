@@ -44,14 +44,14 @@ export function ExplorePage() {
   }
   const needs = useQuery({
     queryKey: keys.needs(params),
-    queryFn: async () => unwrap(await api.GET('/needs', { params: { query: params } })),
+    queryFn: async () => unwrap(await api.GET('/portal/needs', { params: { query: params } })),
     placeholderData: keepPreviousData,
   })
 
   // The product areas that exist, taken from the unfiltered list (the API has no separate endpoint).
   const areaSource = useQuery({
     queryKey: keys.needs({ scope: 'product-areas' }),
-    queryFn: async () => unwrap(await api.GET('/needs', { params: { query: { page_size: 100 } } })),
+    queryFn: async () => unwrap(await api.GET('/portal/needs', { params: { query: { page_size: 100 } } })),
     staleTime: 60_000,
   })
   const areas = [...new Set((areaSource.data?.items ?? []).map((n) => n.product_area).filter((a): a is string => !!a))].sort()

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
 
 from app.db import get_session
+from app.limits import public_write
 from app.schemas import MAX_ID, ErrorResponse, MyRequest, RequestCreate, RequestOut
 from app.services import requests as service
 
@@ -18,7 +19,9 @@ router = APIRouter(tags=["requests"])
     summary="Submit a feature request",
     description="Saves the request as `pending` and returns at once; the intake workflow runs later.",
 )
-def create_request(body: RequestCreate, session: Session = Depends(get_session)) -> RequestOut:
+def create_request(
+    body: RequestCreate, session: Session = Depends(get_session), _limit: None = Depends(public_write)
+) -> RequestOut:
     return RequestOut.model_validate(service.create_request(session, body))
 
 

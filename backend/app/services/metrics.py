@@ -11,6 +11,7 @@ from typing import Any
 
 from sqlmodel import Session, select
 
+from app.health import queue_stats
 from app.models import (
     AIRun,
     AISuggestion,
@@ -151,6 +152,7 @@ def overview(session: Session) -> dict[str, Any]:
             "relink action, which the inbox doesn't have yet, so it stays 0 until one exists.",
         },
         "m3": _m3(session),
+        "queue": queue_stats(session),
     }
 
 

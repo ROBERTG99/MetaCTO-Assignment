@@ -113,6 +113,28 @@ function Body({ m }: { m: Schemas['OpsMetrics'] }) {
         </div>
       </section>
 
+      <section aria-labelledby="queue-heading" className="space-y-3">
+        <h2 id="queue-heading" className="font-heading text-lg font-medium">
+          Queue
+        </h2>
+        <div className="grid gap-4 md:grid-cols-4">
+          <Metric title="Waiting" value={m.queue.pending}>
+            <p>requests waiting for the worker{m.queue.oldest_pending_seconds != null ? ` · oldest ${duration(m.queue.oldest_pending_seconds)}` : ''}</p>
+          </Metric>
+          <Metric title="Processing" value={m.queue.processing}>
+            <p>{m.queue.stuck > 0 ? `${m.queue.stuck} stuck past the lease: check the worker` : 'none stuck'}</p>
+          </Metric>
+          <Metric title="Needs review" value={m.queue.needs_review}>
+            <p>AI failed: waiting for a PM</p>
+          </Metric>
+          <Metric title="Background jobs" value={m.queue.claims_pending + m.queue.fit_pending + m.queue.drafts_pending}>
+            <p>
+              {m.queue.claims_pending} claims · {m.queue.fit_pending} fit ratings · {m.queue.drafts_pending} drafts
+            </p>
+          </Metric>
+        </div>
+      </section>
+
       <section aria-labelledby="success-heading" className="space-y-3">
         <h2 id="success-heading" className="font-heading text-lg font-medium">
           Success metrics

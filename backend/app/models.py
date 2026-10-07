@@ -138,6 +138,7 @@ class Request(SQLModel, table=True):
     extraction_rationale: str | None = None
     need_statement: str | None = None  # problem plus persona, from the extraction
     need_id: int | None = Field(default=None, foreign_key="need.id", index=True)
+    trace_id: str | None = None  # the X-Request-ID it was submitted with; carried into its ai_runs
     created_at: datetime = Field(default_factory=utcnow, index=True)
     processed_at: datetime | None = None
 
@@ -229,6 +230,7 @@ class AIRun(SQLModel, table=True):
     error: str | None = None
     request_id: int | None = Field(default=None, foreign_key="request.id")
     need_id: int | None = Field(default=None, foreign_key="need.id")
+    trace_id: str | None = Field(default=None, index=True)  # the request ID behind this call
     created_at: datetime = Field(default_factory=utcnow)
 
 

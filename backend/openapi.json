@@ -1192,6 +1192,264 @@
           }
         }
       }
+    },
+    "/healthz": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Liveness: the process answers",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Healthz Healthz Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Readiness: database, AI dependencies and worker, plus queue depth and stuck claims",
+        "operationId": "readyz_readyz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready"
+          }
+        }
+      }
+    },
+    "/portal/needs": {
+      "get": {
+        "tags": [
+          "portal"
+        ],
+        "summary": "Find needs (requester view: no scores, revenue or accounts)",
+        "operationId": "list_needs_portal_needs_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/NeedStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "product_area",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Product Area"
+            }
+          },
+          {
+            "name": "segment",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Segment"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Segment"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "priority",
+                "support",
+                "recent"
+              ],
+              "type": "string",
+              "default": "priority",
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalNeedPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    },
+    "/portal/needs/{need_id}": {
+      "get": {
+        "tags": [
+          "portal"
+        ],
+        "summary": "A need as a requester sees it, with the updates written to them",
+        "operationId": "need_portal_needs__need_id__get",
+        "parameters": [
+          {
+            "name": "need_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Need Id"
+            }
+          },
+          {
+            "name": "requester_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 9223372036854775807,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Whose updates to include",
+              "title": "Requester Id"
+            },
+            "description": "Whose updates to include"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalNeedDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2783,6 +3041,9 @@
           },
           "m3": {
             "$ref": "#/components/schemas/M3Out"
+          },
+          "queue": {
+            "$ref": "#/components/schemas/QueueOut"
           }
         },
         "type": "object",
@@ -2794,7 +3055,8 @@
           "false_merge",
           "m1",
           "m2",
-          "m3"
+          "m3",
+          "queue"
         ],
         "title": "OpsMetrics"
       },
@@ -2880,6 +3142,349 @@
           "created_at"
         ],
         "title": "OutboxOut"
+      },
+      "PortalNeedDetail": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "problem": {
+            "type": "string",
+            "title": "Problem"
+          },
+          "persona": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona"
+          },
+          "product_area": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Area"
+          },
+          "status": {
+            "$ref": "#/components/schemas/NeedStatus"
+          },
+          "support_count": {
+            "type": "integer",
+            "title": "Support Count"
+          },
+          "account_count": {
+            "type": "integer",
+            "title": "Account Count"
+          },
+          "request_count": {
+            "type": "integer",
+            "title": "Request Count"
+          },
+          "last_request_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Request At"
+          },
+          "job_to_be_done": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job To Be Done"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/NeedOrigin"
+          },
+          "requests": {
+            "items": {
+              "$ref": "#/components/schemas/PortalRequest"
+            },
+            "type": "array",
+            "title": "Requests",
+            "description": "Titles only: descriptions can hold other customers' details"
+          },
+          "supporters": {
+            "items": {
+              "$ref": "#/components/schemas/PortalSupporter"
+            },
+            "type": "array",
+            "title": "Supporters",
+            "description": "Without their reasons, which are theirs to share"
+          },
+          "updates": {
+            "items": {
+              "$ref": "#/components/schemas/PortalUpdate"
+            },
+            "type": "array",
+            "title": "Updates",
+            "description": "Approved updates written to the requester_id asked for"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "problem",
+          "persona",
+          "product_area",
+          "status",
+          "support_count",
+          "account_count",
+          "request_count",
+          "last_request_at",
+          "job_to_be_done",
+          "origin",
+          "requests",
+          "supporters",
+          "updates"
+        ],
+        "title": "PortalNeedDetail"
+      },
+      "PortalNeedPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PortalNeedSummary"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "PortalNeedPage"
+      },
+      "PortalNeedSummary": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "problem": {
+            "type": "string",
+            "title": "Problem"
+          },
+          "persona": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona"
+          },
+          "product_area": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Area"
+          },
+          "status": {
+            "$ref": "#/components/schemas/NeedStatus"
+          },
+          "support_count": {
+            "type": "integer",
+            "title": "Support Count"
+          },
+          "account_count": {
+            "type": "integer",
+            "title": "Account Count"
+          },
+          "request_count": {
+            "type": "integer",
+            "title": "Request Count"
+          },
+          "last_request_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Request At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "problem",
+          "persona",
+          "product_area",
+          "status",
+          "support_count",
+          "account_count",
+          "request_count",
+          "last_request_at"
+        ],
+        "title": "PortalNeedSummary",
+        "description": "A need as a requester sees it: no scores, revenue or accounts (PM routes keep those)."
+      },
+      "PortalRequest": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "requester_name": {
+            "type": "string",
+            "title": "Requester Name"
+          },
+          "account_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Name"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "requester_name",
+          "account_name",
+          "created_at"
+        ],
+        "title": "PortalRequest"
+      },
+      "PortalSupporter": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "requester_name": {
+            "type": "string",
+            "title": "Requester Name"
+          },
+          "account_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Name"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "link_status": {
+            "$ref": "#/components/schemas/SupportLinkStatus"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "requester_name",
+          "account_name",
+          "severity",
+          "link_status"
+        ],
+        "title": "PortalSupporter"
+      },
+      "PortalUpdate": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "approved_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "body",
+          "approved_at"
+        ],
+        "title": "PortalUpdate"
       },
       "PriorityBreakdown": {
         "properties": {
@@ -3067,6 +3672,62 @@
           "not_rated"
         ],
         "title": "QuadrantView"
+      },
+      "QueueOut": {
+        "properties": {
+          "pending": {
+            "type": "integer",
+            "title": "Pending"
+          },
+          "processing": {
+            "type": "integer",
+            "title": "Processing"
+          },
+          "stuck": {
+            "type": "integer",
+            "title": "Stuck",
+            "description": "Processing past the 600 s lease: the worker died or hangs"
+          },
+          "needs_review": {
+            "type": "integer",
+            "title": "Needs Review"
+          },
+          "claims_pending": {
+            "type": "integer",
+            "title": "Claims Pending"
+          },
+          "fit_pending": {
+            "type": "integer",
+            "title": "Fit Pending"
+          },
+          "drafts_pending": {
+            "type": "integer",
+            "title": "Drafts Pending"
+          },
+          "oldest_pending_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest Pending Seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pending",
+          "processing",
+          "stuck",
+          "needs_review",
+          "claims_pending",
+          "fit_pending",
+          "drafts_pending",
+          "oldest_pending_seconds"
+        ],
+        "title": "QueueOut"
       },
       "RateOut": {
         "properties": {

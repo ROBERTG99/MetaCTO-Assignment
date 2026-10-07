@@ -28,6 +28,7 @@ from app.ai.schemas import (
     UpdateDrafts,
 )
 from app.models import AIRun
+from app.observability import request_id as current_request_id
 from app.scoring import Goal
 
 T = TypeVar("T", bound=BaseModel)
@@ -426,6 +427,7 @@ class Gateway:
                 error=error[:500] if error else None,
                 request_id=request_id,
                 need_id=need_id,
+                trace_id=current_request_id.get(),
             )
         )
 
@@ -611,7 +613,13 @@ class AnthropicClient:
         try:
             output = schema.model_validate_json(text)
         except ValidationError as exc:
-            raise BadOutput(str(exc)[:500], usage) from exc
+            # locations and messages only: the model's own output (which could echo injected text) isn't
+            # sent back in the repair turn
+            problems = "; ".join(
+                f"{'.'.join(map(str, e['loc']))}: {e['msg']}"
+                for e in exc.errors(include_input=False, include_url=False)
+            )
+            raise BadOutput(problems[:500], usage) from exc
         return Reply(output, usage, response.model)
 
 

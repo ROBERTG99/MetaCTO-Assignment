@@ -4,6 +4,7 @@ from sqlmodel import Session, col, select
 
 from app.errors import AppError
 from app.models import Account, Need, Request, Requester, RequestSource, RequestStatus
+from app.observability import request_id
 from app.schemas import RequestCreate
 
 
@@ -45,11 +46,15 @@ def create_request(session: Session, body: RequestCreate) -> Request:
         title=body.title,
         description=body.description,
         status=RequestStatus.pending,
+        trace_id=request_id.get(),
     )
     session.add(request)
     session.commit()
     session.refresh(request)
     return request
+
+
+REVIEW_NOTE = "We couldn't analyse this automatically; a PM will review it."
 
 
 def list_mine(session: Session, requester_id: int) -> list[dict[str, object]]:
@@ -67,7 +72,8 @@ def list_mine(session: Session, requester_id: int) -> list[dict[str, object]]:
             "title": r.title,
             "description": r.description,
             "status": r.status,
-            "needs_review_reason": r.needs_review_reason,
+            # never internal error text: the detail stays in last_error and the PM inbox
+            "needs_review_reason": REVIEW_NOTE if r.status == RequestStatus.needs_review else None,
             "created_at": r.created_at,
             "processed_at": r.processed_at,
             "need": {

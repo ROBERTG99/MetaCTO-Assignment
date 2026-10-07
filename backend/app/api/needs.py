@@ -7,6 +7,7 @@ from app.ai.pipeline import Deps
 from app.api.deps import get_deps
 from app.api.triage import Decision
 from app.db import get_session
+from app.limits import public_write
 from app.models import NeedStatus, Segment
 from app.schemas import (
     MAX_ID,
@@ -98,6 +99,7 @@ def add_support(
     response: Response,
     need_id: int = NeedId,
     session: Session = Depends(get_session),
+    _limit: None = Depends(public_write),
 ) -> SupportOut:
     support, created = service.add_support(session, need_id, body)
     response.status_code = 201 if created else 200

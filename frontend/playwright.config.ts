@@ -13,7 +13,7 @@ const backend = [
   'mkdir -p data',
   'export DATABASE_URL=sqlite:///./data/e2e.db AI_MODE=offline HF_HUB_OFFLINE=1',
   'uv run python -m seed.load',
-  `uv run uvicorn app.main:app --host 127.0.0.1 --port ${API_PORT}`,
+  `uv run uvicorn app.main:app --host 127.0.0.1 --port ${API_PORT} --no-access-log`,
 ].join(' && ')
 
 export default defineConfig({

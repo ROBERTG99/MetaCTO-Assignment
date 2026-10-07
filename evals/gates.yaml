@@ -1,0 +1,11 @@
+# Floors for the free offline baseline (evals/gate.py, run in CI). Committed numbers, REPORT §1:
+# dev accuracy 0.629, dup recall 0.773, false merges among auto-links 0/13; test 0.713, 0.808, 6/59 = 0.102.
+# Raise a floor when a change improves the baseline; never lower one to make CI pass.
+dev:
+  accuracy: {min: 0.61}
+  dup_recall: {min: 0.75}
+  false_merge_auto: {max: 0.05}
+test:
+  accuracy: {min: 0.70}
+  dup_recall: {min: 0.79}
+  false_merge_auto: {max: 0.12}

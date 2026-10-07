@@ -10,7 +10,9 @@ What we prove and how. Flows and formulas are in [spec.md](spec.md). Every flow 
 | API | pytest + FastAPI TestClient, temporary SQLite, FakeLLM | `make check`, CI | Endpoints, status transitions, idempotency, "nothing is deleted" | `backend/tests/api/` |
 | Contract | `make openapi`, then `git diff --exit-code` on the schema and the generated TS types | CI | Frontend and backend agree on the API | `backend/openapi.json`, `frontend/src/api/` |
 | Eval | `evals/` runner on the same pipeline and gateway | `make eval-offline` (free, CI); `make eval` (paid, manual, asks first) | Model and baseline quality, cost, latency | `evals/`, `evals/REPORT.md` |
-| E2E | Playwright (Chromium), offline mode, seeded data | `make e2e`, CI | Golden paths GP1-GP6 | `e2e/` |
+| E2E | Playwright (Chromium), offline mode, seeded data | `make e2e`, CI | Golden paths GP1-GP5 | `frontend/e2e/` |
+| Hardening | Rate limits, body caps, CORS and headers, request IDs into ai_runs, health and readiness, log redaction, portal data boundary, spend ceiling | `make test`, CI | ADR 0011 | `api/test_hardening_api.py`, `api/test_portal_api.py` |
+| Eval gate | The free offline baseline must stay above `evals/gates.yaml` | `make eval-gate`, CI | REPORT §1 | `evals/gate.py`, `evals/tests/test_gate.py` |
 | Hooks | unittest | `make check-hooks` (with `HOOK_TESTS_REQUIRE_RUFF=1` and backend/.venv/bin on PATH, once the backend exists) | Prompt logging, guard, formatter | `.claude/hooks/test_hooks.py` |
 
 No test calls a real model (CLAUDE.md rule 8). Unit and API tests inject FakeLLM, which returns scripted outputs, refusals, `max_tokens` stops, validation failures and provider errors.

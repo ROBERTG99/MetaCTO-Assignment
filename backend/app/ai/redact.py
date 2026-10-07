@@ -6,7 +6,8 @@ and percentages survive. Names are not redacted (spec, risks).
 
 import re
 
-EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+# The left boundary keeps this linear: without it a long run of name characters is O(n^2) (a log-line DoS).
+EMAIL = re.compile(r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 PHONE = re.compile(r"(?<![\w#$])(?:\+|\()?\d[\d\s().-]{6,}\d(?![\w%])")
 
 

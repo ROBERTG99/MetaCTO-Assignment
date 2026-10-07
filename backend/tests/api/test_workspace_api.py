@@ -341,3 +341,9 @@ def test_m1_ignores_informational_related_suggestions(
                         label="related", state=SuggestionState.proposed))  # shown on the request, never decided  # fmt: skip
     db.commit()
     assert client.get("/metrics").json()["m1"]["untouched"] == before
+
+
+def test_ai_ops_reports_queue_depth(client: TestClient, world: dict[str, Any], make: Factory) -> None:
+    make.request(world["rosa"], None, "waiting")
+    q = client.get("/metrics").json()["queue"]
+    assert (q["pending"], q["stuck"], q["needs_review"]) == (1, 0, 0)

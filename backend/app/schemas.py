@@ -582,6 +582,17 @@ class M3Out(BaseModel):
     note: str
 
 
+class QueueOut(BaseModel):
+    pending: int
+    processing: int
+    stuck: int = Field(description="Processing past the 600 s lease: the worker died or hangs")
+    needs_review: int
+    claims_pending: int
+    fit_pending: int
+    drafts_pending: int
+    oldest_pending_seconds: float | None
+
+
 class OpsMetrics(BaseModel):
     runs: list[RunStats]
     totals: OpsTotals
@@ -591,3 +602,58 @@ class OpsMetrics(BaseModel):
     m1: M1Out
     m2: M2Out
     m3: M3Out
+    queue: QueueOut
+
+
+class PortalNeedSummary(BaseModel):
+    """A need as a requester sees it: no scores, revenue or accounts (PM routes keep those)."""
+
+    id: int
+    title: str
+    problem: str
+    persona: str | None
+    product_area: str | None
+    status: NeedStatus
+    support_count: int
+    account_count: int
+    request_count: int
+    last_request_at: datetime | None
+
+
+class PortalNeedPage(BaseModel):
+    items: list[PortalNeedSummary]
+    total: int
+    page: int
+    page_size: int
+
+
+class PortalRequest(BaseModel):
+    id: int
+    title: str
+    requester_name: str
+    account_name: str | None
+    created_at: datetime
+
+
+class PortalSupporter(BaseModel):
+    id: int
+    requester_name: str
+    account_name: str | None
+    severity: Severity
+    link_status: SupportLinkStatus
+
+
+class PortalUpdate(BaseModel):
+    id: int
+    body: str
+    approved_at: datetime | None
+
+
+class PortalNeedDetail(PortalNeedSummary):
+    job_to_be_done: str | None
+    origin: NeedOrigin
+    requests: list[PortalRequest] = Field(
+        description="Titles only: descriptions can hold other customers' details"
+    )
+    supporters: list[PortalSupporter] = Field(description="Without their reasons, which are theirs to share")
+    updates: list[PortalUpdate] = Field(description="Approved updates written to the requester_id asked for")

@@ -77,3 +77,17 @@ export function useAddSupport(requesterId: number | null) {
     },
   })
 }
+
+/** A need as a requester sees it (/portal): no revenue, accounts, descriptions or internal notes. */
+export function usePortalNeed(needId: number, requesterId: number | null) {
+  return useQuery({
+    queryKey: [...keys.need(needId), 'portal', requesterId] as const,
+    queryFn: async () =>
+      unwrap(
+        await api.GET('/portal/needs/{need_id}', {
+          params: { path: { need_id: needId }, query: { requester_id: requesterId ?? undefined } },
+        }),
+      ),
+    enabled: Number.isFinite(needId) && needId > 0,
+  })
+}

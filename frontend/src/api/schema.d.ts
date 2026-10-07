@@ -340,6 +340,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/healthz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Liveness: the process answers */
+        get: operations["healthz_healthz_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/readyz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Readiness: database, AI dependencies and worker, plus queue depth and stuck claims */
+        get: operations["readyz_readyz_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portal/needs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Find needs (requester view: no scores, revenue or accounts) */
+        get: operations["list_needs_portal_needs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portal/needs/{need_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A need as a requester sees it, with the updates written to them */
+        get: operations["need_portal_needs__need_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -928,6 +996,7 @@ export interface components {
             m1: components["schemas"]["M1Out"];
             m2: components["schemas"]["M2Out"];
             m3: components["schemas"]["M3Out"];
+            queue: components["schemas"]["QueueOut"];
         };
         /** OpsTotals */
         OpsTotals: {
@@ -962,6 +1031,118 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /** PortalNeedDetail */
+        PortalNeedDetail: {
+            /** Id */
+            id: number;
+            /** Title */
+            title: string;
+            /** Problem */
+            problem: string;
+            /** Persona */
+            persona: string | null;
+            /** Product Area */
+            product_area: string | null;
+            status: components["schemas"]["NeedStatus"];
+            /** Support Count */
+            support_count: number;
+            /** Account Count */
+            account_count: number;
+            /** Request Count */
+            request_count: number;
+            /** Last Request At */
+            last_request_at: string | null;
+            /** Job To Be Done */
+            job_to_be_done: string | null;
+            origin: components["schemas"]["NeedOrigin"];
+            /**
+             * Requests
+             * @description Titles only: descriptions can hold other customers' details
+             */
+            requests: components["schemas"]["PortalRequest"][];
+            /**
+             * Supporters
+             * @description Without their reasons, which are theirs to share
+             */
+            supporters: components["schemas"]["PortalSupporter"][];
+            /**
+             * Updates
+             * @description Approved updates written to the requester_id asked for
+             */
+            updates: components["schemas"]["PortalUpdate"][];
+        };
+        /** PortalNeedPage */
+        PortalNeedPage: {
+            /** Items */
+            items: components["schemas"]["PortalNeedSummary"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+        };
+        /**
+         * PortalNeedSummary
+         * @description A need as a requester sees it: no scores, revenue or accounts (PM routes keep those).
+         */
+        PortalNeedSummary: {
+            /** Id */
+            id: number;
+            /** Title */
+            title: string;
+            /** Problem */
+            problem: string;
+            /** Persona */
+            persona: string | null;
+            /** Product Area */
+            product_area: string | null;
+            status: components["schemas"]["NeedStatus"];
+            /** Support Count */
+            support_count: number;
+            /** Account Count */
+            account_count: number;
+            /** Request Count */
+            request_count: number;
+            /** Last Request At */
+            last_request_at: string | null;
+        };
+        /** PortalRequest */
+        PortalRequest: {
+            /** Id */
+            id: number;
+            /** Title */
+            title: string;
+            /** Requester Name */
+            requester_name: string;
+            /** Account Name */
+            account_name: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** PortalSupporter */
+        PortalSupporter: {
+            /** Id */
+            id: number;
+            /** Requester Name */
+            requester_name: string;
+            /** Account Name */
+            account_name: string | null;
+            severity: components["schemas"]["Severity"];
+            link_status: components["schemas"]["SupportLinkStatus"];
+        };
+        /** PortalUpdate */
+        PortalUpdate: {
+            /** Id */
+            id: number;
+            /** Body */
+            body: string;
+            /** Approved At */
+            approved_at: string | null;
         };
         /** PriorityBreakdown */
         PriorityBreakdown: {
@@ -1040,6 +1221,28 @@ export interface components {
              * @description Strategic fit not rated yet (pending, failed or offline)
              */
             not_rated: components["schemas"]["QuadrantNeed"][];
+        };
+        /** QueueOut */
+        QueueOut: {
+            /** Pending */
+            pending: number;
+            /** Processing */
+            processing: number;
+            /**
+             * Stuck
+             * @description Processing past the 600 s lease: the worker died or hangs
+             */
+            stuck: number;
+            /** Needs Review */
+            needs_review: number;
+            /** Claims Pending */
+            claims_pending: number;
+            /** Fit Pending */
+            fit_pending: number;
+            /** Drafts Pending */
+            drafts_pending: number;
+            /** Oldest Pending Seconds */
+            oldest_pending_seconds: number | null;
         };
         /** RateOut */
         RateOut: {
@@ -2311,6 +2514,135 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OutboxOut"][];
+                };
+            };
+        };
+    };
+    healthz_healthz_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+        };
+    };
+    readyz_readyz_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Not ready */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_needs_portal_needs_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                status?: components["schemas"]["NeedStatus"] | null;
+                product_area?: string | null;
+                segment?: components["schemas"]["Segment"] | null;
+                sort?: "priority" | "support" | "recent";
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalNeedPage"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    need_portal_needs__need_id__get: {
+        parameters: {
+            query?: {
+                /** @description Whose updates to include */
+                requester_id?: number | null;
+            };
+            header?: never;
+            path: {
+                need_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalNeedDetail"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

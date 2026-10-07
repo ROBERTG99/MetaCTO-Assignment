@@ -1,13 +1,22 @@
-.PHONY: setup dev dev-api dev-web test lint typecheck typecheck-web check check-hooks e2e gen-api seed seed-raw seed-live openapi rank eval-offline eval-tune eval eval-compare eval-fit-report snapshot
+.PHONY: setup setup-backend setup-web audit eval-gate dev dev-api dev-web test lint typecheck typecheck-web check check-hooks e2e gen-api seed seed-raw seed-live openapi rank eval-offline eval-tune eval eval-compare eval-fit-report snapshot
 
 BACKEND := cd backend &&
 
 WEB := cd frontend &&
 
 # Install backend (Python 3.12 via uv) and frontend (npm) dependencies, the embedding model and Playwright's Chromium
-setup:
+setup: setup-backend setup-web
+
+setup-backend:
 	$(BACKEND) uv sync && uv run python -m app.ai.embeddings download
+
+setup-web:
 	$(WEB) npm ci && npx playwright install chromium
+
+# Known vulnerabilities in what ships: Python runtime dependencies (pip-audit) and npm production dependencies
+audit:
+	$(BACKEND) uv export --no-dev --format requirements-txt --no-emit-project > .audit-requirements.txt && uvx pip-audit==2.10.1 -r .audit-requirements.txt --disable-pip; rc=$$?; trash .audit-requirements.txt; exit $$rc
+	$(WEB) npm audit --omit=dev --audit-level=high
 
 # API on :8000 (with its worker) and the web app on :5173
 dev:
@@ -15,7 +24,7 @@ dev:
 
 # API on :8000 with reload
 dev-api:
-	$(BACKEND) uv run uvicorn app.main:app --reload --port 8000
+	$(BACKEND) uv run uvicorn app.main:app --reload --port 8000 --no-access-log
 
 dev-web:
 	$(WEB) npm run dev
@@ -77,6 +86,11 @@ EVAL := cd backend && PYTHONPATH=.. HF_HUB_OFFLINE=1 uv run python -m evals.run
 
 eval-offline:
 	$(EVAL) --split $(SPLIT) --strategy $(STRATEGY)
+
+# Free regression gate (CI): the offline baseline on dev and test must stay above evals/gates.yaml
+eval-gate:
+	$(MAKE) eval-offline SPLIT=dev && $(MAKE) eval-offline SPLIT=test
+	cd backend && PYTHONPATH=.. uv run python -m evals.gate
 
 # Choose baseline thresholds on dev only and write config/routing.yaml
 eval-tune:
