@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Distill eval case: one incoming request judged against the seeded backlog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "slice", "backlog", "request", "expected", "rationale", "author", "reviewed_by_human"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^(H|T)[0-9]{3}$", "description": "H = handwritten, T = generated"},
+    "slice": {
+      "enum": [
+        "same_solution_different_need",
+        "different_solution_same_need",
+        "hard_negative",
+        "paraphrase",
+        "clear_duplicate",
+        "new_need",
+        "prompt_injection",
+        "non_english"
+      ]
+    },
+    "backlog": {"const": "seed_v1", "description": "All 17 needs and 62 requests of backend/seed (ground_truth.json version 1)"},
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "description", "requester_role", "segment", "source"],
+      "properties": {
+        "title": {"type": "string", "minLength": 1, "maxLength": 200},
+        "description": {"type": "string", "maxLength": 5000},
+        "requester_role": {"type": "string", "description": "Job title as the requester would write it"},
+        "segment": {"enum": ["enterprise", "mid_market", "smb", "prospect", "internal"]},
+        "source": {"enum": ["portal", "support", "sales", "cs", "internal"]}
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["need", "persona"],
+      "properties": {
+        "need": {
+          "description": "The seeded need this belongs to, or null if it is a new need",
+          "enum": [
+            null, "alerts", "audit_log", "chart_comments", "csv_import", "dark_mode", "data_portability",
+            "embedded", "excel_finance", "localization", "mobile", "onboarding_templates", "performance",
+            "permissions", "scim", "share_kpis", "snowflake", "sso"
+          ]
+        },
+        "persona": {"type": "string", "description": "Same vocabulary as ground_truth.json, or a new one for new needs"},
+        "must_not_link": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Needs a model is likely to confuse this with (the trap)"
+        }
+      }
+    },
+    "rationale": {"type": "string", "minLength": 1, "description": "Why this label: one or two sentences"},
+    "author": {"type": "string"},
+    "reviewed_by_human": {"type": "boolean"}
+  }
+}
