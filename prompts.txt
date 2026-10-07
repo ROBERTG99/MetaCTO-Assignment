@@ -215,3 +215,38 @@ SUMMARY:
 - Wrote docs/requirements.md: 24 R rows (setup, product, submission, one per Loom section), Q1-Q8, D1-D7; plus implicit criteria, traps T1-T10 and a "Beyond the brief" table. D7 and R1, R3, R4 are done; the rest todo.
 - Flagged: D2, D3, D6 and the CLAUDE.md extras clearly exceed the brief; D1, D4, D5, D7 only mildly. Main risks: the 2-3 h guidance (T1), "first prompt" order (T2), deadline date unknown (T3), reviewer emails now public (T4), live-AI demo needs a paid go (T6).
 - Docs-only: make check and reviewer skipped. Committed "docs: assignment and requirements traceability".
+
+---
+[#7] 2026-10-07T14:23:54Z
+PROMPT:
+Here's how I'm thinking about the product. No files in this step except the prompts.txt entry: I want your critique and an options analysis first.
+
+The bet. The brief lists nine places AI could help. I'm putting AI first at intake and triage, because almost every pain they list starts there: duplicates come in there, demand gets split across five phrasings of the same need, PMs spend their hours there, and nobody can tell a customer anything until requests are organized. My thesis: requests describe solutions, the unit of value is the underlying need. "Excel export" from a finance lead and "Excel export" from an IT admin are different problems; "scheduled email report", "weekly PDF" and "Slack KPI digest" are one problem. So every request becomes a deduplicated, need-centric, evidence-weighted signal when it arrives, and the PM handles exceptions instead of reading the stream. Prioritization, briefs and stakeholder updates become thin layers once that's true.
+
+Fictional customer: Brightboard, a B2B dashboards and analytics SaaS, with enterprise, mid-market and SMB accounts plus prospects.
+
+Flows:
+1. Dedupe at the door: while a requester types, show the closest existing needs (no LLM, under 300 ms), with "this is my need, add my support". Support captures why it matters and a severity, so a vote becomes evidence.
+2. Intake workflow in the background, after the request is saved: redact PII, embed, retrieve candidates, extract the underlying need (problem, persona, job to be done, proposed solution, product area, severity signals), adjudicate against candidates (duplicate / related / new with confidence and a rationale citing the text), route by a confidence policy in code, enrich with CRM data in code, score in code.
+3. Confidence policy: above an auto threshold, link automatically (labelled, one-click undo); in the gray zone, a suggestion in the PM inbox; below, a new need. Thresholds come from evals.
+4. Prioritization: the model rates strategic fit against written company goals with a rationale and a quote; code computes demand (unique accounts weighted by ARR and segment, plus prospect pipeline), urgency (severity, renewals in the next 90 days) and the score. Popular and strategic are shown separately.
+5. PM triage inbox: accept, reject or undo, with both texts side by side.
+6. Decision brief agent: the one place where the path isn't known in advance. Read-only tools, a step cap, and code verifies every quote and number.
+7. Close the loop: on a status change, AI drafts a requester update and a CS note per account, flags commitments the PM didn't make, and the PM approves.
+8. AI Ops: every model call with cost and latency, suggestion acceptance, and the success metrics.
+
+Success metrics: PM triage effort (share of requests with zero PM touch), duplicate rate (deflection at the door, leakage into the backlog), decision-loop latency (status change to every supporter notified). Guardrails: acceptance rate and false-merge rate.
+
+Options I want compared. For each, a short table against these criteria: fit with what the assignment rewards, quality, cost per request, latency, time to build today, and the production path. Then your recommendation and what would change your mind.
+a) Where AI goes first: intake and triage (my lean) vs prioritization vs stakeholder communication.
+b) Orchestration: a code-orchestrated workflow plus one bounded agent (my lean) vs LangGraph vs agents everywhere (Claude Agent SDK or Anthropic Managed Agents).
+c) Retrieval: local embeddings (fastembed, bge-small) vs Voyage AI embeddings vs no embeddings (the LLM reads the backlog). Also: index needs (centroid or canonical text) or index member requests and aggregate by need?
+d) Models: Haiku 4.5 everywhere, Sonnet 5.5 for adjudication, or a cascade (Haiku first, Sonnet only for the gray zone). I want evals to decide; tell me what the eval must show for each.
+e) Storage: SQLite with in-process vector search vs Postgres + pgvector.
+f) Background work: FastAPI background tasks vs a small worker queue.
+
+Then give me the 3-5 weakest points of my design, most serious first, each with what you'd change. Be direct. Stop there and wait for my answers.
+SUMMARY:
+- Analysis only, no files besides this entry. Loaded the claude-api skill for current prices (Haiku 4.5 $1/$5, Sonnet 5.5 $2/$10 per MTok) and model constraints.
+- Compared options a-f in chat. Recommended: AI at intake; code workflow (agent only where the path is truly open); local bge-small, indexing member requests, aggregating per need; models decided by a 3-config eval (Haiku-all, Sonnet 5.5 low-effort all, Haiku extract + Sonnet adjudicate), with a cascade unlikely to earn its complexity at ~1 cent per request; SQLite with in-process vectors; a DB-backed job queue instead of BackgroundTasks.
+- Weakest points: scope vs time; door dedupe by text contradicts the need thesis and lets requesters merge unchecked; model confidence uncalibrated and false merges unmeasured; eval circularity and size; the brief "agent" not justified as an agent. Waiting for answers.
