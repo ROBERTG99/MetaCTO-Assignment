@@ -6,7 +6,7 @@ Status: accepted, 2026-10-07
 Extraction and adjudication may need different models. At about 1-2 cents per request (spec section 9), price doesn't decide the choice; false merges and gray-zone size do. CLAUDE.md requires every model call to go through `app/ai/gateway.py` and be recorded in ai_runs (rule 5), and requires an LLM step to beat the no-LLM baseline (rule 7). Tests never call a real model (rule 8).
 
 ## Decision
-- **One gateway, several providers.** The gateway has one method per step (`extract`, `adjudicate`, `rate_fit`, `brief`, `agent_step`) and three providers: AnthropicProvider, OfflineProvider (heuristics and the baseline), and FakeLLM for tests.
+- **One gateway, several clients.** The gateway has one method per step (`extract`, `adjudicate`, `rate_fit`, `draft_updates`; `brief` and `agent_step` were planned for F6, which wasn't built) and these clients: `AnthropicClient`, `OfflineClient` (heuristics and the baseline), `FakeLLM` for tests, and the test-only `FaultInjectingClient`.
 - **Configuration.** The model per step and the prompt version come from configuration (FAST_MODEL, SMART_MODEL, and per-step overrides). Model IDs are never hard-coded at call sites.
 - **Evals decide, on the same frozen splits:**
   - C0: the baseline.
@@ -25,7 +25,7 @@ Extraction and adjudication may need different models. At about 1-2 cents per re
 
 ## Consequences
 - Changing a model or prompt is a config change plus an eval run recorded in evals/REPORT.md, with the prompt version bumped (rule 7).
-- Model-specific rules (structured outputs, effort, stop reasons) live in the provider, not in the pipeline.
+- Model-specific rules (structured outputs, effort, stop reasons) live in the client (`AnthropicClient` in the gateway), not in the pipeline.
 - The eval set has to be large enough to separate configurations: about 150 labelled pairs, weighted toward the hard cases (test-plan.md).
 
 ## Outcome (2026-10-07, evals/REPORT.md §3 and §4)

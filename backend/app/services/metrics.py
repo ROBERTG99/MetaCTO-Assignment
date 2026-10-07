@@ -1,7 +1,7 @@
 """AI Ops and the success metrics (spec §10, F8), computed from the rows the app already writes.
 
 Every number is derived on read from ai_runs, aisuggestion, linkevent, support and request: nothing here is
-stored, and nothing is estimated. M3 needs F7 (stakeholder updates), which isn't built, so it says so.
+stored, and nothing is estimated. M3 comes from the status changes and the approvals of stakeholder updates (F7).
 """
 
 import math

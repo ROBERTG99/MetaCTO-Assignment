@@ -45,6 +45,8 @@ jobs:
         run: make typecheck
       - name: Pytest
         run: make test
+      - name: API contract (openapi.json matches the code)
+        run: make openapi && git diff --exit-code backend/openapi.json
       - name: Hook tests (ruff required)
         run: |
           git config --global user.email ci@example.com
@@ -71,6 +73,9 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+        working-directory: frontend
+      - name: API contract (generated types match openapi.json)
+        run: npm run gen:api && git diff --exit-code src/api/schema.d.ts
         working-directory: frontend
       - name: Typecheck
         run: npm run typecheck

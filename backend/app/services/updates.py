@@ -39,7 +39,13 @@ def change_status(
     if need is None:
         raise not_found("Need", need_id)
     if need.status == NeedStatus.merged:
-        raise AppError(409, "need_merged", f"Need {need_id} was merged into need {need.merged_into_id}")
+        raise AppError(
+            409,
+            "need_merged",
+            f"Need {need_id} was merged into need {need.merged_into_id}"
+            if need.merged_into_id
+            else f"Need {need_id} was emptied and closed",
+        )
     target = NeedStatus(status)
     if need.status == target:
         raise AppError(409, "no_change", f"Need {need_id} is already {target}")

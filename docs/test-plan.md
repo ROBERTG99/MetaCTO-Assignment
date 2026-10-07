@@ -1,14 +1,14 @@
 # Test plan
 
-What we prove and how. Flows and formulas are in [spec.md](spec.md). Every flow in the spec maps to at least one item below. Module names are the planned ones; [requirements.md](requirements.md) points at them.
+What we prove and how. Flows and formulas are in [spec.md](spec.md). Every flow in the spec maps to at least one item below, or is marked not built. Module names are the ones in the repo; [requirements.md](requirements.md) points at them.
 
 ## 1. Pyramid
 
-| Layer | Tool | Runs in | Scope | Planned location |
+| Layer | Tool | Runs in | Scope | Location |
 |---|---|---|---|---|
 | Unit | pytest, offline | `make check`, CI | Deterministic logic: formulas, policy, verifiers, worker state machine, gateway bookkeeping with FakeLLM | `backend/tests/unit/` |
 | API | pytest + FastAPI TestClient, temporary SQLite, FakeLLM | `make check`, CI | Endpoints, status transitions, idempotency, "nothing is deleted" | `backend/tests/api/` |
-| Contract | `make openapi`, then `git diff --exit-code` on the schema and the generated TS types | CI | Frontend and backend agree on the API | `backend/openapi.json`, `frontend/src/api/` |
+| Contract | `make openapi` then `git diff --exit-code backend/openapi.json`; `npm run gen:api` then `git diff --exit-code` on the generated types | CI (backend and frontend jobs) | Frontend and backend agree on the API | `backend/openapi.json`, `frontend/src/api/schema.d.ts` |
 | Eval | `evals/` runner on the same pipeline and gateway | `make eval-offline` (free, CI); `make eval` (paid, manual, asks first) | Model and baseline quality, cost, latency | `evals/`, `evals/REPORT.md` |
 | E2E | Playwright (Chromium), offline mode, seeded data | `make e2e`, CI | Golden paths GP1-GP6 | `frontend/e2e/` |
 | Hardening | Rate limits, body caps, CORS and headers, request IDs into ai_runs, health and readiness, log redaction, portal data boundary, spend ceiling | `make test`, CI | ADR 0011 | `api/test_hardening_api.py`, `api/test_portal_api.py` |
@@ -21,49 +21,52 @@ No test calls a real model (CLAUDE.md rule 8). Unit and API tests inject FakeLLM
 
 **Test-first** (the `tdd` skill: show the test failing, then make it pass). These are deterministic functions specified by formulas in the spec. A bug in any of them corrupts every number the PM sees, and a test written first is the executable form of the spec.
 
-| Unit | Planned module |
+| Unit | Module |
 |---|---|
-| Redaction of emails and phone numbers | `unit/test_redaction.py` |
-| Retrieval aggregation: per need by best match, top 5, canonical vector included | `unit/test_retrieval.py` |
-| Routing score, bands, claim confirmed vs disputed, baseline through the same policy | `unit/test_routing.py` |
-| Audit sampling by `sha256(request_id) mod 10` | `unit/test_audit_sampling.py` |
-| Enrichment: account join; a missing account is scored without revenue and flagged | `unit/test_enrich.py` |
-| Demand, urgency, strategic fit, priority, quadrant, owner, re-rating crossings, ties, config validation (passing) | `unit/test_scoring.py` |
-| Quote and number verifier (adjudication, strategic fit, brief, agent findings) | `unit/test_verify.py` |
-| Worker: claim, backoff, stale reclaim, needs_review after N, terminal failures go straight to needs_review, an active claim becomes disputed, one-transaction results | `unit/test_worker.py` |
-| Gateway: one ai_run per call with every field; redaction of every input; refusal is terminal; max_tokens and validation errors retried once, then terminal | `unit/test_gateway.py` |
-| Overlap agent (should): step cap enforced; only read-only tools exposed; findings verified | `unit/test_agent.py` |
-| Metric computations M1-M4, acceptance rate, Wilson interval | `unit/test_metrics.py` |
+| Redaction of emails and phones, not other numbers (passing) | `unit/test_redaction.py` |
+| Retrieval: best match per need, canonical vector, top k (passing) | `unit/test_retrieval.py` |
+| Routing score, bands, seeded 10% audit sample (`sha256(seed:id) mod 10000 < rate × 10000`), claim verdict, baseline through the same policy (passing) | `unit/test_policy.py` |
+| Baseline bands and threshold loading (passing) | `unit/test_baseline.py` |
+| Demand, urgency, strategic fit, priority, quadrant, owner, re-rating crossings, ties, config validation; a missing account or ARR scores zero revenue and is flagged (passing) | `unit/test_scoring.py` |
+| Quote verification: made-up quotes dropped in adjudication and strategic fit (passing) | `unit/test_pipeline.py`, `unit/test_strategic_fit.py` |
+| Gateway: AIRun per call, refusal terminal, one repair retry, max_tokens retry, transient errors, redaction before the client, XML tags (passing) | `unit/test_gateway.py` |
+| Live client bookkeeping with a stubbed SDK: validation, cost, refusal, max_tokens, error classes (passing) | `unit/test_anthropic_client.py` |
+| Pipeline with FakeLLM: auto, gray zone, new need, audit flag, prompt injection, redaction, idempotency, claims (passing) | `unit/test_pipeline.py` |
+| Worker: one at a time, attempts and last error, backoff, 3 failures to needs_review, refusal, stale reclaim, outage never fails a submission (passing) | `unit/test_worker.py` |
+| Strategic fit with FakeLLM: what is sent (no requester fields, redacted, escaped), per-goal rows, quote check, coverage repair, worker retries and failure, merged and stale needs (passing) | `unit/test_strategic_fit.py` |
+| Commitment check: dates, timing and promises flagged unless the PM set a date (passing) | `unit/test_commitments.py` |
+| Test-only fault switch (passing) | `unit/test_fault_injection.py` |
+| Embedders: fake determinism, real model offline (passing) | `unit/test_embeddings.py` |
+| Seed data: every request labelled, clusters of two or more, references exist, the Excel split on both sides, recorded fit ratings (passing) | `unit/test_seed_data.py` |
+| SQLite in WAL mode with foreign keys (passing) | `unit/test_db.py` |
+| Metric computations M1-M4, acceptance rate, Wilson interval (passing) | `api/test_workspace_api.py`, `api/test_updates_api.py` (M3) |
+| Priority on read: breakdown per need, confirmed support only, each account once, quadrant view, a config-only weight change re-ranks (passing) | `api/test_priority_api.py` |
 | Frozen test split: hash, uncommitted changes, same-commit rule (passing) | `evals/tests/test_dataset.py` |
 | Eval metrics with hand-computed values (passing) | `evals/tests/test_metrics.py` |
 | Threshold choice on dev (passing) | `evals/tests/test_tune.py` |
-| Retrieval: best match per need, canonical vector, top k (passing) | `unit/test_retrieval.py` |
-| Baseline bands and threshold loading (passing) | `unit/test_baseline.py` |
-| Embedders: fake determinism, real model offline (passing) | `unit/test_embeddings.py` |
 | Runner logic: dev labels, noise, raw tuning mode, each test case counted once (passing) | `evals/tests/test_run.py` |
-| Routing score, bands, seeded 10% audit sample, claim verdict (passing) | `unit/test_policy.py` |
-| Redaction of emails and phones, not other numbers (passing) | `unit/test_redaction.py` |
-| Gateway: AIRun per call, refusal terminal, one repair retry, max_tokens retry, transient errors, redaction before the client, XML tags (passing) | `unit/test_gateway.py` |
-| Pipeline with FakeLLM: auto, gray zone, new need, audit flag, prompt injection, redaction, idempotency, claims (passing) | `unit/test_pipeline.py` |
-| Worker: one at a time, attempts and last error, backoff, 3 failures to needs_review, refusal, stale reclaim, outage never fails a submission (passing) | `unit/test_worker.py` |
-| Priority on read: breakdown per need, confirmed support only, each account once, quadrant view, a config-only weight change re-ranks (passing) | `api/test_priority_api.py` |
-| Strategic fit with FakeLLM: what is sent (no requester fields, redacted, escaped), per-goal rows, quote check, coverage repair, worker retries and failure, merged and stale needs, `fit_texts` (passing) | `unit/test_strategic_fit.py` |
-| Seed data: every request labelled, clusters of two or more, references exist, the Excel split on both sides, the loader loads raw data only (passing) | `unit/test_seed_data.py` |
-| SQLite in WAL mode with foreign keys (passing) | `unit/test_db.py` |
+| Strategic-fit eval and the offline gate (passing) | `evals/tests/test_fit.py`, `evals/tests/test_gate.py` |
+| Requester progress: stuck after 2 minutes (passing) | `frontend/src/pages/requester/progress.test.ts` (Vitest) |
+| Overlap agent and brief verifier: not built (F6 cut) | none |
 
 **API modules** (written alongside the endpoints, from the transitions in spec §5):
 
-| Scope | Planned module |
+| Scope | Module |
 |---|---|
-| Submit: saved before any model call, saved when the provider fails, claim plus support in one transaction | `api/test_requests_api.py` |
-| List, search, suggest (never calls the gateway); merged needs excluded | `api/test_needs_api.py` |
-| Support: idempotent per requester | `api/test_support_api.py` |
-| Inbox actions: accept, reject, undo, audit verdict; LinkEvents record who; nothing deleted (passing; manual link and merge not built yet) | `api/test_triage_api.py` |
-| The door: similar needs from embeddings only, merged needs excluded (passing) | `api/test_similar_api.py` |
-| Metrics endpoint | `api/test_metrics_api.py` |
-| Briefs and stakeholder updates (should): nothing goes out without approval | `api/test_briefs_api.py`, `api/test_updates_api.py` |
+| Submit: saved before any model call, validation and on-behalf rules (passing) | `api/test_requests_api.py` |
+| Saved when the provider fails: an outage never fails a submission (passing) | `unit/test_worker.py::test_a_provider_outage_never_fails_the_submission`, e2e GP6 |
+| List, search, filters, sorts, detail; merged needs excluded (passing) | `api/test_needs_api.py` |
+| Support: a claim first, idempotent per requester, concurrent first supports, merged needs 409 (passing) | `api/test_support_api.py` |
+| Inbox actions: accept, reject, undo, audit verdict; LinkEvents record who; nothing deleted; an emptied need sends pending suggestions nowhere (passing; manual link and merge not built) | `api/test_triage_api.py` |
+| The door: similar needs from embeddings only, merged needs excluded, never calls the gateway (passing) | `api/test_similar_api.py` |
+| Error shape: 422, 404, 405, 500 (passing) | `api/test_errors_api.py` |
+| Requesters list (passing) | `api/test_requesters_api.py` |
+| Metrics endpoint and the PM workspace (passing) | `api/test_workspace_api.py` (`GET /metrics`) |
+| Stakeholder updates: nothing goes out without approval, compare-and-set, superseded drafts (passing) | `api/test_updates_api.py` |
+| Requester portal: no PM data (passing) | `api/test_portal_api.py` |
+| Briefs: not built (F6 cut) | none |
 
-**Eval-first.** Every prompt (extraction, adjudication, strategic fit, brief, agent) gets its labelled cases before the prompt exists. A prompt or model change bumps the prompt version and requires an eval run (rule 7).
+**Eval-first.** Adjudication was eval-first: the 17 hard cases and the frozen test set came before any prompt (§3). Extraction is evaluated only through routing (row "Extraction" below). Two exceptions are recorded in [ai-development.md](ai-development.md#test-first-and-eval-first): `strategic_fit_v1` and its cases landed in the same commit, and `stakeholder_update_v1` has no eval. A prompt or model change bumps the prompt version and requires an eval run (rule 7).
 
 **Not test-first.** UI components and wiring, which are covered by e2e after the fact.
 
@@ -107,7 +110,7 @@ Test-set composition. Robert's 17 handwritten cases (`H…`, `reviewed_by_human:
 | Gray-zone share | Share of requests sent to the inbox, which is PM work. |
 | New-need accuracy | True new requests not linked to anything. |
 | Hard-slice accuracy | Accuracy on each hard slice separately. |
-| Extraction | Exact accuracy on persona and product area. |
+| Extraction | Not built as its own metric: extraction is evaluated only end to end, through the routing decision it feeds (REPORT §3 shares one Haiku extraction across strategies). |
 | Cost and latency | Cost per request; p50 and p95 latency per step, from ai_runs. |
 | Calibration (only to decide C4) | On dev, the precision of Haiku's auto-band decisions (routing score ≥ T_auto) compared with C3's (ADR 0006). |
 
@@ -130,13 +133,12 @@ Test-set composition. Robert's 17 handwritten cases (`H…`, `reviewed_by_human:
 
 **Should-flow slices** (added when the flow is built):
 - Strategic fit: 10 seeded needs plus one prompt-injection case, rated 0-3 per goal by Robert before any paid call (`evals/datasets/strategic_fit.jsonl`; `evals/fit.py` refuses a paid run until every case is labelled and reviewed). Reports agreement within one point, exact agreement, MAE and Spearman of S against constant and embedding baselines, plus the quote verification rate (REPORT §5). Report-only: no dev split.
-- Brief: cases with planted fabricated quotes and numbers; the verifier must flag all of them.
-- Agent: cases with known overlaps and dependencies; precision of its findings and step-cap compliance.
-- Commitment flags (F7): drafts containing promised dates or features the PM didn't make.
+- Brief and agent: not built (F6 was cut), so they have no slices.
+- Commitment flags (F7): covered by the deterministic check's unit tests (`unit/test_commitments.py`), not by an eval. `stakeholder_update_v1` itself has no eval (requirements D8).
 
 ## 4. E2E golden paths (offline, seeded, Chromium)
 
-Written before the pages (2026-10-07) as the contract for them: accessible names, roles and visible text, not CSS. `make e2e` starts a fresh offline API on :8001 (its own `backend/data/e2e.db`, reseeded from the recorded snapshot every run) with the in-process worker, and the web app on :5174; the specs share that database and run one at a time.
+GP1-GP4 were written before the pages (2026-10-07) as the contract for them; GP5 (#19) and GP6 (#21) were written after the code they test ([ai-development.md](ai-development.md#test-first-and-eval-first)). All of them select by accessible names, roles and visible text, not CSS. `make e2e` starts a fresh offline API on :8001 (its own `backend/data/e2e.db`, reseeded from the recorded snapshot every run) with the in-process worker, and the web app on :5174; the specs share that database and run one at a time.
 
 | ID | Spec | Path | Proves |
 |---|---|---|---|
@@ -146,16 +148,15 @@ Written before the pages (2026-10-07) as the contract for them: accessible names
 | GP4 | `e2e/pm-priorities.spec.ts` | The quadrant shows clear wins, strategic bets, popular but off-strategy, park and not rated yet, with every undecided need placed; the SSO row's "Explain score" opens a breakdown whose demand, urgency and strategic-fit sections explain their inputs and whose points add up to the score in the table | F4, §8; R10 |
 | GP5 | `e2e/stakeholder-updates.spec.ts` | The PM marks SSO planned with a reason that says "next quarter" and no date; personal drafts appear (offline template), none sent; Priya's refers to what she asked for and is flagged; the PM fixes and approves every personal draft; AI Ops shows M3 with a value; Priya sees the update on the need page | F7, M3; ADR 0010 |
 | GP6 | `e2e/provider-failure.spec.ts` | The provider fails (a fault switch that exists only with `APP_ENV=test`, triggered by a marker in the text): the request is saved, the requester sees "Needs review" with a plain reason, the PM sees it in Needs review with the real reason. Linking it by hand isn't built yet | F2 failure path, rule 2 |
-| planned | metrics | The metrics view shows M1, M2, M4, the acceptance rate and the ai_runs cost and latency summary | F8 |
 
 The offline texts were chosen by measuring the real embedder against the seeded backlog, so each lands in its band deterministically; a seed or threshold change can move them, and the spec comments give the measured similarity.
 
 Notes for building the pages against these specs:
-- **Shared database, fixed order.** Specs run one at a time in file order (discover, priorities, triage, submit). The triage spec changes the backlog (an accept, an undo that creates a need); the others don't depend on its result. Offline, any membership change queues a strategic-fit rating that only live mode runs, so touched needs show "Pending".
+- **Shared database, fixed order.** Specs run one at a time in file order (discover-and-support, pm-priorities, pm-triage, provider-failure, stakeholder-updates, submit-and-track). The triage spec changes the backlog (an accept, an undo that creates a need); the others don't depend on its result. Offline, any membership change queues a strategic-fit rating that only live mode runs, so touched needs show "Pending".
 - **Offline claims are disputed.** GP1's reason is 0.584 similar to SSO, below the suggest band, so the baseline disputes the claim; the spec accepts any of the three states.
 - **Polling.** My requests and the triage inbox must refetch on an interval while anything is pending (headless browsers don't refocus), or the 30 s waits fail.
 - **Stable hooks the pages must provide:** `data-testid` `support-confirmation`, `request-status`, `need-link`, `need-source`, `routing-badge`, `priority`, `points` (one per rated component; none for an unrated one), `priority-total`; `data-request-id` on Auto-linked articles; toasts through sonner's "Notifications" region.
-- **API work the pages needed** is built (2026-10-07): AI source and routing parts on triage items, a written reason for baseline decisions, `GET /requests?requester_id=`, the Auto-linked list (newest 50, with a total), need origin, analysis, evidence, updates and audit trail, `PATCH /needs/{id}`, and `GET /metrics`. All four specs pass (`make e2e`); contract tests in `api/test_workspace_api.py`.
+- **API work the pages needed** is built (2026-10-07): AI source and routing parts on triage items, a written reason for baseline decisions, `GET /requests?requester_id=`, the Auto-linked list (newest 50, with a total), need origin, analysis, evidence, updates and audit trail, `PATCH /needs/{id}/status`, `GET /metrics`, and the requester views under `/portal`. All six specs pass (`make e2e`, and in CI); contract tests in `api/test_workspace_api.py`, `api/test_updates_api.py` and `api/test_portal_api.py`.
 
 ## 5. What we deliberately don't test
 

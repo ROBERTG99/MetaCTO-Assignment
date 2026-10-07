@@ -1,6 +1,6 @@
 # 0001. Workflow first, with one agent only where the path is open
 
-Status: accepted, 2026-10-07
+Status: accepted, 2026-10-07. Outcome: the overlap agent was cut for time, as this ADR allowed. The decision brief it feeds (F6) wasn't built either, which goes beyond this plan (it said the brief stays). The product has no agent; every model step is a single call inside a code-orchestrated workflow.
 
 ## Context
 The brief asks how we think about "real-world agentic systems". Anthropic's "Building effective agents" calls both workflows (predefined code paths around model calls) and agents (the model chooses its own steps and tools) agentic systems, and recommends the simplest one that works. Intake is the same eight steps for every request. A model choosing the path there would add cost, latency and variance, and would make each step impossible to evaluate on its own. The one open-ended question in the product is "what else in the backlog does this need overlap with, block or depend on?". Which needs to look at next depends on what the last search found.

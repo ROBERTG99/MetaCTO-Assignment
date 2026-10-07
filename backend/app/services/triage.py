@@ -290,7 +290,9 @@ def _own_need(session: Session, r: Request, by: str, reason: str, deps: Deps) ->
             and not members
             and not supporters
         ):
-            old.status, old.merged_into_id = NeedStatus.merged, need.id  # emptied: never offered again
+            # Emptied: never offered again. No merged_into_id: the request that left is not a successor, so
+            # pending suggestions for this need must fail (need_gone), not follow it.
+            old.status = NeedStatus.merged
             session.add(old)
         queue_fit_if_due(session, old_id, deps.priorities)
     queue_fit_if_due(session, need.id, deps.priorities)

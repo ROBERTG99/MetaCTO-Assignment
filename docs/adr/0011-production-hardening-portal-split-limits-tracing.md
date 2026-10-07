@@ -14,7 +14,7 @@ A security review of the whole repository found that the app was already sound o
 Auth is out of scope for now (spec A3), so the design has to make adding it later simple.
 
 ## Decision
-- **Two API surfaces.** `/portal/...` is what a requester may read. Every other route is PM-only by convention. Auth later guards by prefix, so a forgotten route fails closed rather than open.
+- **A requester view apart from the PM view.** Requester pages read needs through `/portal/...`, which carries only what a requester may see. The other calls they make (`POST /requests`, `POST /needs/{id}/support`, `GET /needs/similar`, `GET /requests?requester_id=` and `GET /requesters`) stay outside `/portal`; with auth they must be scoped to the signed-in requester. `/healthz` and `/readyz` stay public for the platform's probes. Every other route is PM-only, so auth can guard those by default.
 - **Limits:**
   - **Public writes.** A per-client rate on the public writes (a route dependency, so path spellings can't bypass it).
   - **Every write.** A per-client budget on every write, by method.

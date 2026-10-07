@@ -11,17 +11,17 @@ flowchart LR
   end
   subgraph API["FastAPI process"]
     Routes["app/api<br/>thin routes"]
-    Services["app/services<br/>requests, needs, triage, metrics"]
+    Services["app/services<br/>requests, needs, triage, priority,<br/>updates, portal, metrics"]
     Worker["worker loop<br/>(started in lifespan)"]
     Pipeline["app/ai/pipeline.py<br/>redact, embed, retrieve, extract,<br/>adjudicate, route, enrich, score"]
     Scoring["app/scoring.py<br/>routing and priority math"]
     Gateway["app/ai/gateway.py<br/>the only provider caller;<br/>writes ai_runs"]
     Embedder["Embedder<br/>fastembed bge-small (local)"]
   end
-  DB[("SQLite (WAL)<br/>tables, request queue,<br/>link history, vectors")]
+  DB[("SQLite (WAL)<br/>tables, request queue,<br/>link history")]
   Config["config/*.yaml<br/>routing, priorities, goals"]
   Anthropic["Anthropic API<br/>(AI_MODE=live)"]
-  Offline["Offline provider<br/>heuristics and baseline<br/>(AI_MODE=offline, default)"]
+  Offline["OfflineClient<br/>heuristics and baseline<br/>(AI_MODE=offline, default)"]
   Evals["evals/ runner<br/>same pipeline and gateway"]
 
   SPA -->|HTTP/JSON| Routes --> Services --> DB
@@ -39,8 +39,8 @@ flowchart LR
 ```
 
 - **One process.** The API, the worker loop and SQLite all run in one process (ADR 0005, ADR 0007). The worker code doesn't depend on the web layer, so it can later run as its own process.
-- **Gateway.** It exposes `extract`, `adjudicate`, `rate_fit`, `brief` and `agent_step`. It redacts emails and phone numbers in every input, including agent tool results, before any provider call (rule 9). Providers are AnthropicProvider, OfflineProvider, and FakeLLM in tests (ADR 0006). Prompts live in `app/ai/prompts/<step>_v<N>.md`.
-- **Vectors.** They are float32 BLOBs in the `embedding` table, loaded into one numpy matrix at startup and updated on write. Search is brute-force cosine (ADR 0005).
+- **Gateway.** It exposes one method per model step: `extract`, `adjudicate`, `rate_fit` and `draft_updates`. It redacts emails and phone numbers in every input before any provider call (rule 9). Clients are `AnthropicClient`, `OfflineClient` (heuristics, the baseline, template drafts), `FakeLLM` in tests and `FaultInjectingClient` (only with `APP_ENV=test`, for the e2e failure path) (ADR 0006, ADR 0008). Prompts live in `app/ai/prompts/<step>_v<N>.md`.
+- **Vectors.** They aren't stored: at startup the index embeds every member request and need with the local model into one numpy matrix, and updates it on write. Search is brute-force cosine (ADR 0005).
 
 ## Intake sequence (through the database queue)
 
@@ -56,7 +56,7 @@ sequenceDiagram
   participant M as Model provider
 
   R->>UI: types title and description
-  UI->>API: GET /needs/suggest?q=... (debounced)
+  UI->>API: GET /needs/similar?q=... (debounced)
   API->>API: embed + numpy search (no LLM, under 300 ms)
   API-->>UI: top 5 needs (problem plus persona)
   alt "This is my need"
@@ -88,10 +88,12 @@ sequenceDiagram
   else refusal, second max_tokens or validation failure, or attempts = N
     W->>DB: request needs_review (reason)
   end
-  Note over W,DB: On startup, processing rows older than the lease go back to pending.
+  Note over W,DB: On startup, every processing row goes back to pending (lease 0: one process).
 ```
 
-## Decision brief with the overlap agent (should)
+## Decision brief with the overlap agent (designed, not built)
+
+Not built: the brief (F6) and its overlap agent were cut for time, so the product has no agent (ADR 0001 outcome). The design is kept for the production path.
 
 ```mermaid
 flowchart TD
@@ -107,4 +109,4 @@ flowchart TD
   I --> J["PM reads it; status decisions stay human"]
 ```
 
-The brief is a workflow, because its inputs are known in advance. The agent is the only step whose path isn't known ahead of time: which needs to search for depends on what it finds. That is why it is the only agent (ADR 0001).
+The brief is a workflow, because its inputs are known in advance. The agent is the only step whose path isn't known ahead of time: which needs to search for depends on what it finds. That is why it would have been the only agent (ADR 0001).

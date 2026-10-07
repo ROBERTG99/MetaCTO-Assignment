@@ -1,4 +1,4 @@
-.PHONY: test-web setup setup-backend setup-web audit eval-gate dev dev-api dev-web test lint typecheck typecheck-web check check-hooks e2e gen-api seed seed-raw seed-live openapi rank eval-offline eval-tune eval eval-compare eval-fit-report snapshot
+.PHONY: demo test-web setup setup-backend setup-web audit eval-gate dev dev-api dev-web test lint typecheck typecheck-web check check-hooks e2e gen-api seed seed-raw seed-live openapi rank eval-offline eval-tune eval eval-compare eval-fit-report snapshot
 
 BACKEND := cd backend &&
 
@@ -17,6 +17,9 @@ setup-web:
 audit:
 	$(BACKEND) uv export --no-dev --format requirements-txt --no-emit-project > .audit-requirements.txt && uvx pip-audit==2.10.1 -r .audit-requirements.txt --disable-pip; rc=$$?; trash .audit-requirements.txt; exit $$rc
 	$(WEB) npm audit --omit=dev --audit-level=high
+
+# One command, offline and without a key: install, load the demo data, run API and web app
+demo: setup seed dev
 
 # API on :8000 (with its worker) and the web app on :5173
 dev:

@@ -23,7 +23,7 @@ Distill turns every request, as it arrives, into a deduplicated, need-centric, e
 | PM (triage owner) | Reads every request, searches by keyword, merges by hand | Reviews only the gray zone, disputes, failures and a 10% audit sample |
 | Requester (customer, CS, sales, internal) | Submits into a void; duplicates are invisible | Sees existing needs while typing; adding support takes one click and their "why" counts as evidence |
 | CS and sales | Can't see which of their accounts want what | Sees the accounts and revenue behind each need, and renewals at risk |
-| Product leader | Gets vote counts, or opinions | Gets demand, urgency and strategic fit shown separately, and (should) a verified decision brief |
+| Product leader | Gets vote counts, or opinions | Gets demand, urgency and strategic fit shown separately, and, in the design, a verified decision brief (F6, not built) |
 
 ## 3. Workflow before and after
 
@@ -43,14 +43,14 @@ Must = the golden path and is built first. Should = built only after the golden 
 | ID | Flow | Level | Proven by |
 |---|---|---|---|
 | F0 | **Browse, search and support.** `GET /needs` gives text search, filters (status, product area, segment), sorting (priority, support, recent) and pagination. The need page shows member requests, supports and accounts, the score breakdown, and every AI value with its source, confidence and rationale. `POST /needs/{id}/support` records why it matters and a severity (nice_to_have, important, blocker). It is idempotent per requester and creates a claim that counts only once confirmed. | must | `api/test_needs_api.py`, `api/test_support_api.py` (passing); e2e GP1, GP4 |
-| F1 | **Dedupe at the door (simple).** While the requester types, show the 5 closest needs, phrased as problem plus persona. This uses embeddings only and no LLM, under 300 ms server-side. "This is my need" calls the support endpoint, which creates a **requester claim** (a support in `claimed` state) that the intake workflow checks. Otherwise the requester submits a new request (`POST /requests`, saved as pending). | must | `api/test_requests_api.py` (passing); suggest API test (never calls the gateway; ranking); e2e GP1; metric M2 |
-| F2 | **Intake workflow** (background, after save): redact, embed, retrieve, extract, adjudicate, route, enrich, score (section 6). | must | Unit tests per deterministic step and for the worker; evals (extraction, retrieval recall@5, adjudication); e2e GP2 (submit and track) and the planned provider-failure path |
+| F1 | **Dedupe at the door (simple).** While the requester types, show the 5 closest needs, phrased as problem plus persona. This uses embeddings only and no LLM, under 300 ms server-side. "This is my need" calls the support endpoint, which creates a **requester claim** (a support in `claimed` state) that the intake workflow checks. Otherwise the requester submits a new request (`POST /requests`, saved as pending). | must | `api/test_requests_api.py`, `api/test_similar_api.py` (passing; embeddings only, never calls the gateway); e2e GP1; metric M2 |
+| F2 | **Intake workflow** (background, after save): redact, embed, retrieve, extract, adjudicate, route, enrich, score (section 6). | must | Unit tests per deterministic step and for the worker; evals (retrieval recall@5 and adjudication; extraction is evaluated only through routing, not on its own); e2e GP2 (submit and track) and GP6 (provider failure) |
 | F3 | **Confidence policy.** Routing score (section 8) produces: auto-link (labelled, undoable, 10% audit sample), suggestion in the inbox, or new need. A requester-claimed link is confirmed or disputed. | must | Unit tests (routing, policy, audit sampling); threshold choice in evals/REPORT.md; metric M4; e2e GP3 |
-| F4 | **Prioritization** (ADR 0009). Demand, urgency, strategic fit and priority are computed in code when a need is read, with every component in the breakdown (must). Strategic fit is rated per goal by the model (strategic_fit_v1) against the goals in config/priorities.yaml, with the quote verified in code (should). Popular and strategic are shown separately, in the breakdown and in `GET /insights/quadrant`; each need is routed to the PM team owning its product area. | must (computed) / should (fit) | `unit/test_scoring.py`, `api/test_priority_api.py`, `unit/test_strategic_fit.py` (passing); strategic-fit agreement in evals/REPORT.md §5; e2e GP4 |
-| F5 | **PM triage inbox.** Action tabs, audit sample first (at the locked threshold the gray zone is small, so the audit is most of the review work): Audit sample, Suggestions, Claim disagreements, Needs review (AI failed). Keyboard: j/k move, a accepts, r rejects (a held key never decides twice). A read-only Auto-linked tab lists every auto-link with an undo button and requires no action (CLAUDE.md rule 2). Both texts side by side, with accept, reject, undo, link manually, new need, or merge needs. | must | `api/test_triage_api.py` (each transition in §5; links never deleted); e2e GP3; metric: suggestion acceptance rate |
-| F6 | **Decision brief.** A workflow: gather the facts, make one LLM call, verify every quote and number in code. An optional **overlap agent** finds needs this one overlaps with, blocks or depends on, using read-only search tools and a step cap; its findings feed the brief as cited evidence. If time runs short, the agent is dropped and the brief stays. | should | `unit/test_verify.py`; `unit/test_agent.py` (step cap, read-only tools) with FakeLLM; eval with fabricated quotes and numbers |
+| F4 | **Prioritization** (ADR 0009). Demand, urgency, strategic fit and priority are computed in code when a need is read, with every component in the breakdown (must). Strategic fit is rated per goal by the model (strategic_fit_v1) against the goals in config/priorities.yaml, with the quote verified in code (should). Popular and strategic are shown separately, in the breakdown and in `GET /insights/quadrant`; each need is routed to the PM team owning its product area. | must (computed) / should (fit) | `unit/test_scoring.py`, `api/test_priority_api.py`, `unit/test_strategic_fit.py` (passing); strategic-fit agreement pending human labels (the eval hasn't run); e2e GP4 |
+| F5 | **PM triage inbox.** Action tabs, audit sample first (at the locked threshold the gray zone is small, so the audit is most of the review work): Audit sample, Suggestions, Claim disagreements, Needs review (AI failed). Keyboard: j/k move, a accepts, r rejects (a held key never decides twice). A read-only Auto-linked tab lists every auto-link with an undo button and requires no action (CLAUDE.md rule 2). Both texts side by side, with accept, reject and undo (built); link manually, new need and merge needs are not built, so leakage (M2) stays 0. | must | `api/test_triage_api.py` (each transition in §5; links never deleted); e2e GP3; metric: suggestion acceptance rate |
+| F6 | **Decision brief.** A workflow: gather the facts, make one LLM call, verify every quote and number in code. An optional **overlap agent** finds needs this one overlaps with, blocks or depends on, using read-only search tools and a step cap; its findings feed the brief as cited evidence. If time runs short, the agent is dropped and the brief stays. | should (not built: cut for time) | Not built. Only the quote verifier exists (`verify_quotes`, used by adjudication and strategic fit) |
 | F7 | **Close the loop** ([ADR 0010](adr/0010-stakeholder-updates-ai-drafts-code-checks-pm-approves.md)). `PATCH /needs/{id}/status` takes a status, the PM's reason and an optional date, and saves at once. The worker then drafts (stakeholder_update_v1, FAST_MODEL; offline: a template) a personal update per supporter that refers to what they asked for, and a CS note per affected account. Code flags dates, timing and delivery promises the PM didn't make; approval re-checks and refuses while flagged. Approved messages go to a simulated outbox and the requester's need page, and each personal approval marks that supporter notified. | should (built) | `unit/test_commitments.py`, `api/test_updates_api.py` (passing); e2e GP5 `frontend/e2e/stakeholder-updates.spec.ts` (passing); metric M3 |
-| F8 | **Metrics and AI Ops view (minimal).** Metrics M1, M2 and M4 and the guardrails (M3 is added with F7), plus a summary of ai_runs: cost per request, p50/p95 latency per step, failure rate, by model and prompt version. | must | `unit/test_metrics.py`; `api/test_metrics_api.py`; the planned e2e metrics path |
+| F8 | **Metrics and AI Ops view.** Metrics M1-M4 and the guardrails (acceptance, needs-review rate, queue health), plus a summary of ai_runs: cost per request, p50/p95 latency per step, failure rate, by model and prompt version. | must | `api/test_workspace_api.py` (M1, M2, M4, queue), `api/test_updates_api.py` (M3); e2e GP5 checks M3 on the AI Ops page |
 
 ## 5. Data model
 
@@ -60,13 +60,17 @@ All tables live in SQLite (`backend/app/models.py`). Current state lives on the 
 |---|---|---|
 | account | id, name, segment (enterprise, mid_market, smb), arr, renewal_date, is_prospect, pipeline_value | The seeded "CRM". Prospects have arr 0 and a pipeline value. |
 | requester | id, name, role, account_id | `account_id` is null for Brightboard staff (support, sales, CS, internal). No auth (A3). |
-| need | id, title (problem plus persona), problem, persona, job_to_be_done, product_area, status (open, planned, in_progress, shipped, declined, merged), merged_into_id, created_by (ai, pm, seed), priority_score, demand, urgency, strategic_fit | Status is set by a PM, except `merged`. Merged needs are excluded from list, search, suggestions and retrieval. |
-| request | id, requester_id, account_id (the customer, also when staff submit on its behalf), source (portal, support, sales, cs, internal), title, description, status (pending, processing, processed, needs_review), attempts, last_error, claimed_at, needs_review_reason, the AI fields (redacted_text, problem, persona, job_to_be_done, proposed_solution, product_area, severity_signal, extraction_confidence, extraction_rationale; null until processed), need_id | Saved as pending before any model call. The row is the queue job (ADR 0007). |
+| need | id, title (problem plus persona), problem, persona, job_to_be_done, product_area, status (open, planned, in_progress, shipped, declined, merged), merged_into_id, created_by (ai, pm, seed), fit_status and fit_* job fields, fit_run_id (priority, demand, urgency and strategic fit are computed when read, not stored; ADR 0009) | Status is set by a PM, except `merged`. Merged needs are excluded from list, search, suggestions and retrieval. |
+| request | id, requester_id, account_id (the customer, also when staff submit on its behalf), source (portal, support, sales, cs, internal), title, description, status (pending, processing, processed, needs_review), attempts, last_error, claimed_at, needs_review_reason, the AI fields (redacted_text, problem, persona, job_to_be_done, proposed_solution, product_area, severity_signal, extraction_confidence, extraction_rationale; null until processed), need_id, trace_id | Saved as pending before any model call. The row is the queue job (ADR 0007). |
 | support | need_id, requester_id (unique together), why_it_matters, severity (nice_to_have, important, blocker), link_status (claimed, confirmed, disputed, rejected), check_attempts, check_started_at, check_error, review_reason | `POST /needs/{id}/support` is idempotent, including under a double click. It creates a **claim** that counts only once confirmed. A merged need returns 409. |
 | aisuggestion | request_id or support_id, need_id, kind (duplicate, related, new_need), label, routing_score, model_confidence, rationale, quotes, state (proposed, applied, accepted, rejected, undone), audit_sample, audit_verdict (correct, false_merge), decided_by, decided_at, ai_run_id | Every routing decision, with its evidence. Only `proposed` suggestions appear in the action tabs. `related` ones are informational. |
 | linkevent | action (link, unlink), actor (auto, pm, requester_claim), actor_id, need_id, request_id or support_id, suggestion_id, routing_score, reason, created_at | Append-only; never updated. One row per link or unlink. |
-| airun | step, model, prompt_version, input_tokens, output_tokens, cost_usd, latency_ms, outcome, error, request_id or need_id | Written by the gateway for every call (rule 5). |
-| stakeholderupdate (should) | need_id, kind (requester_update, cs_note), requester_id or account_id, body, flagged_commitments, status (draft, approved, discarded), approved_by, ai_run_id | Nothing goes out without approval (F7). |
+| airun | step, model, prompt_version, input_tokens, output_tokens, cost_usd, latency_ms, outcome, error, request_id or need_id, trace_id | Written by the gateway for every call (rule 5). |
+| stakeholderupdate | need_id, kind (requester_update, cs_note), requester_id or account_id, status_change_id, body, original_body, approved_body, edited_by, flagged_commitments, status (draft, approved, discarded, superseded), approved_by, ai_run_id | Nothing goes out without approval (F7). A newer status change supersedes older drafts, which can't be approved. |
+| needstatuschange | need_id, from_status, to_status, by, reason, target_date, drafts_status and drafts_* job fields | The PM's decision, saved at once; it is also the job that drafts the updates (ADR 0010). M3 starts here. |
+| goalrating | need_id, ai_run_id, goal, rating (0-3), rationale, quote, quote_dropped | Append-only strategic-fit ratings per goal; `need.fit_run_id` points at the set in use (ADR 0009). |
+| notification | need_id, requester_id, update_id, status_change_id, notified_at | Written when a personal update is approved: that supporter is marked notified. |
+| outboxmessage | update_id, channel, recipient, subject, body | The simulated outbox: what would be sent, written only on approval. |
 
 **Transitions.** `request.status` is the pipeline state. The routing outcome is `need_id` plus the suggestion and the LinkEvents.
 
@@ -83,10 +87,10 @@ All tables live in SQLite (`backend/app/models.py`). Current state lives on the 
 | AI failure (terminal) | needs_review (reason) | none | Needs review |
 | Claim check fails (terminal) | (support) | support `disputed` with review_reason | Disputed claims |
 | PM accepts | processed | need_id set; suggestion `accepted`; LinkEvent link by pm. For a claim: support `confirmed`. | none |
-| PM rejects | processed | suggestion `rejected`; the PM links elsewhere or creates a new need (LinkEvent by pm). For a claim: support `rejected`. | none |
+| PM rejects | processed | suggestion `rejected`; the request becomes its own need if nothing else is pending (LinkEvent by pm); linking it elsewhere by hand isn't built. For a claim: support `rejected`. | none |
 | PM undoes a link (`POST /requests/{id}/unlink`) | processed | The request becomes its own need: LinkEvent unlink and link by pm (reason undo); suggestion `undone`; a sampled link with no verdict is recorded as false_merge. 409 if it is already the only request in its need | none |
 | Audit verdict false_merge | processed | audit_verdict set; the request becomes its own need, as for an undo (reason "audit: false_merge") | none |
-| PM relinks the last request of an AI-created need, or merges two needs | processed | unlink + link LinkEvents; the emptied need becomes `merged` with merged_into_id | none |
+| An audit false_merge verdict moves the last request out of an AI-created need (built); a manual relink or merging two needs (not built) | processed | unlink + link LinkEvents; the emptied need becomes `merged` with no merged_into_id, so pending suggestions for it fail with need_gone instead of following the request | none |
 
 **Audit sample** (F3). An auto-link is sampled when `sha256(seed:request_id) mod 10000 < rate × 10000` (seed and rate 10% in `config/routing.yaml`): random-looking, reproducible and testable. Decisions are compare-and-set: a second decision on the same item gets 409. Accepting into a need that has since been merged follows the merge. The PM marks each sampled link correct or false_merge.
 
@@ -94,19 +98,19 @@ All tables live in SQLite (`backend/app/models.py`). Current state lives on the 
 
 | # | Step | Technique | Model | Deterministic | On failure |
 |---|---|---|---|---|---|
-| 1 | Redact | Regex for emails and phone numbers. Stored as `redacted_text` before embedding, and applied again inside the gateway on every input of every call (brief, agent tool results, F7 drafts, candidate texts) | none | yes | not applicable |
+| 1 | Redact | Regex for emails and phone numbers. Stored as `redacted_text` before embedding, and applied again inside the gateway on every input of every call (candidate texts, strategic-fit inputs, F7 drafts) | none | yes | not applicable |
 | 2 | Embed | Local fastembed `bge-small` behind an `Embedder` interface | none (local) | yes | Retry the row; after N failures, needs_review |
 | 3 | Retrieve | numpy cosine over request and canonical vectors; per need, take the best match; return the top 5 needs, plus the claimed need if there is one and it isn't already among them | none | yes | An empty backlog goes straight to new_need |
-| 4 | Extract | Structured output (`messages.parse` with a Pydantic schema); text inside XML tags | Chosen by eval (ADR 0006); offline: heuristics | no | Provider error or timeout (transient): the job is retried with backoff, up to N=3 attempts, then needs_review. Inside the gateway: max_tokens gets one retry with a higher limit, and a validation error gets one retry. A second failure of either, or any refusal, is terminal: needs_review immediately, with the reason. |
+| 4 | Extract | Structured output (`messages.create` with a JSON schema from the Pydantic model, validated in code; ADR 0008); text inside XML tags | Chosen by eval (ADR 0006); offline: heuristics | no | Provider error or timeout (transient): the job is retried with backoff, up to N=3 attempts, then needs_review. Inside the gateway: max_tokens gets one retry with a higher limit, and a validation error gets one retry. A second failure of either, or any refusal, is terminal: needs_review immediately, with the reason. |
 | 5 | Adjudicate | Structured output: for each candidate, a label (same_need, related, different), a confidence, a rationale and quotes | Chosen by eval; offline: similarity thresholds (the baseline) | no | Same as step 4. A quote that isn't found verbatim in the request is dropped and flagged. |
 | 6 | Route | Routing score and thresholds (section 8) | none | yes | not applicable |
 | 7 | Enrich | Join the requester and account: segment, ARR, renewal date, pipeline | none | yes | Missing account: score without revenue; the gap is flagged |
 | 8 | Score | The prioritization formulas (section 8) | none | yes | not applicable |
 
 **As built (2026-10-07)** in `backend/app/ai/`:
-- **Gateway.** It renders `prompts/extract_need_v1.md` and `prompts/adjudicate_v1.md`. Untrusted text is redacted, then HTML-escaped inside `<request>`, `<why_it_matters>` and `<candidates>`.
+- **Gateway.** It renders the versioned prompts: `extract_need_v1`, `adjudicate_v1`, `strategic_fit_v1` and `stakeholder_update_v1`. Untrusted text is redacted, then HTML-escaped inside its tags: `<request>`, `<why_it_matters>` and `<candidates>` for intake; `<need>` and `<requests>` for strategic fit (with `<goals>` from config); `<need>`, `<supporters>`, `<accounts>` and `<decision>` for stakeholder updates.
 - **Clients.**
-  - Live: `messages.parse` with a Pydantic `output_format`, a 30 s timeout and 2 SDK retries.
+  - Live: `messages.create` with `output_config.format` (a JSON schema from the Pydantic model); the stop reason is checked first and the JSON is validated in our code (ADR 0008); a 30 s timeout and 2 SDK retries.
   - Tests: FakeLLM.
   - `AI_MODE=offline`: keyword heuristics for extraction, and the pipeline routes on similarity alone (the baseline).
 - **Refusal fallbacks are off on purpose.** A refusal must reach needs_review, and one model per step keeps the evals clean.
@@ -127,7 +131,7 @@ Model calls happen first. All results are then written in one transaction, so a 
 | Requester claims "this is my need" | Automatic, then adjudicated; disputes go to the PM | Requesters over-claim, and an unchecked claim is a merge |
 | Auto-link above T_auto | Automatic, labelled, one-click undo, 10% audited | High precision expected; the audit measures it |
 | Link in the gray zone | Suggestion only; the PM decides | Errors there are costly and uncertain |
-| Create a new need | Automatic | Cheap to merge later, and a merge is measured (M2 leakage) |
+| Create a new need | Automatic | Undo exists. Merging needs isn't built, so M2 leakage stays 0 until it is |
 | AI failure | Goes to needs_review with the reason | AI never blocks a submission (CLAUDE.md rule 2) |
 | Rate strategic fit (should) | Automatic, shown as a separate component with its rationale | Advisory; the PM sees it apart from demand |
 | Need status (planned, declined, ...) | Human only | It is a product decision |
@@ -188,8 +192,8 @@ Assumptions (estimates; measured values from ai_runs replace them):
 
 Per need (should flows):
 - Strategic fit: 1 call, about $0.01.
-- Brief: 1 call, about $0.03.
-- Overlap agent: at most 8 turns, about $0.10 at the cap.
+- Brief (not built): 1 call, about $0.03.
+- Overlap agent (not built): at most 8 turns, about $0.10 at the cap.
 
 At about 2,000 requests a month, the most expensive config costs about $46. That is small next to PM time (assumption A6: about 67 hours at 2 minutes per request). **Model choice is therefore decided on false merges and gray-zone size, not on price.**
 
@@ -199,7 +203,7 @@ The baselines are assumptions (marked A), because there is no real "before" data
 
 | ID | Metric | Definition | Assumed baseline | Level |
 |---|---|---|---|---|
-| M1 | PM triage effort | Share of processed requests with no PM LinkEvent or PM suggestion decision, excluding audit verdicts; also reported as PM minutes per 100 requests (× 2 min) | 0% untouched today (A5) | must |
+| M1 | PM triage effort | Share of finished requests (processed or needs review) no PM had to touch: no PM LinkEvent or suggestion decision (audit verdicts excluded), no suggestion still waiting, not failed (A15); also reported as PM minutes per 100 requests (× 2 min) | 0% untouched today (A5) | must |
 | M2 | Duplicate rate | Deflection: claims made at the door ÷ (claims + new requests) over the period. Leakage: requests routed to a new need that a PM later relinks to an existing need (LinkEvent unlink and link by pm) | About 30% of incoming requests are duplicates (A7) | must |
 | M3 | Decision-loop latency | Per status change with personal updates: the time from the change to the last supporter's notification (their update approved); the median over completed changes. Changes with drafts still waiting are reported as pending | Median 14 days (A8) | measured (F7 built) |
 | M4 | False-merge rate (guardrail) | Audited auto-links marked false_merge ÷ audited auto-links, with a Wilson 95% interval; the undo rate on auto-links is reported as a lower bound | Target ≤ 3% (upper bound shown) | must |
@@ -220,8 +224,8 @@ Further guardrails shown in F8:
 | Provider outage or refusal | The queue retries with backoff, then needs_review; the app stays usable |
 | Local embeddings miss paraphrases | recall@5 is its own metric; switch to Voyage below 90% (ADR 0002) |
 | "The richest customer wins" | Log-scaled demand; popular and strategic shown separately; the PM decides status |
-| Cost runaway | max_tokens per step, the agent step cap, ai_runs cost in F8. Not yet covered: a rate limit on `POST /requests` and support. In live mode each pending row becomes paid calls, so a cap on pending rows per requester comes with the worker. |
-| Scope vs the 2-3 h guidance | Must and should levels; the agent is dropped first |
+| Cost runaway | max_tokens per step, ai_runs cost in F8, per-client rate limits on `POST /requests` and support plus a write budget, and a daily model-spend ceiling the worker checks before claiming a job (ADR 0011). |
+| Scope vs the 2-3 h guidance | Must and should levels; the agent and the decision brief (F6) were not built |
 
 ## 12. Non-goals
 

@@ -229,3 +229,32 @@ def test_rejecting_a_claim_unlinks_it(client: TestClient, db: Session, inbox: di
     assert sup.link_status == SupportLinkStatus.rejected  # type: ignore[union-attr]
     [e] = db.exec(select(LinkEvent).where(LinkEvent.support_id == inbox["sup"])).all()
     assert (e.action, e.actor, e.actor_id) == (LinkAction.unlink, LinkActor.pm, "maya")
+
+
+def test_a_need_emptied_by_a_false_merge_sends_pending_suggestions_nowhere(
+    client: TestClient, db: Session, make: Factory, inbox: dict[str, Any]
+) -> None:
+    it = inbox["b"].it
+    n = make.need("Ops need audit logs")
+    a = make.request(
+        it, n, "Audit logs", status=RequestStatus.processed, need_statement="Ops need audit logs"
+    )
+    b = make.request(
+        it, n, "Login history", status=RequestStatus.processed, need_statement="Ops need history"
+    )
+    c = make.request(
+        it, None, "Who changed what", status=RequestStatus.processed, need_statement="Ops need logs"
+    )
+    sampled = AISuggestion(kind=SuggestionKind.duplicate, label="same_need", routing_score=0.9, rationale="r",
+                           request_id=b.id, need_id=n.id, state=SuggestionState.applied, audit_sample=True)  # fmt: skip
+    pending = AISuggestion(kind=SuggestionKind.duplicate, label="same_need", routing_score=0.6, rationale="r",
+                           request_id=c.id, need_id=n.id, state=SuggestionState.proposed)  # fmt: skip
+    db.add_all([sampled, pending])
+    db.commit()
+    assert client.post(f"/requests/{a.id}/unlink", json={"by": "maya"}).status_code == 200  # n holds only b
+    assert client.post(f"/triage/{sampled.id}/reject", json={"by": "maya"}).status_code == 200  # n is emptied
+    r = client.post(f"/triage/{pending.id}/accept", json={"by": "maya"})
+    assert r.status_code == 409  # not silently linked to b's unrelated new need
+    assert_error(r.json(), "need_gone")
+    db.refresh(c)
+    assert c.need_id is None

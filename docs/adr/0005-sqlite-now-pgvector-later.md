@@ -7,7 +7,7 @@ Reviewers must be able to clone the repo and run it with one command, without an
 
 ## Decision
 - SQLite in WAL mode via SQLModel, in a single process: the API plus the worker loop.
-- Vectors are stored as float32 BLOBs in the `embedding` table and searched with brute-force numpy cosine, held in memory and updated on write.
+- Vectors are searched with brute-force numpy cosine, held in memory and updated on write. As built they aren't stored: the index re-embeds every request and need at startup with the local model (the planned `embedding` table of float32 BLOBs wasn't needed at this size).
 - No sqlite-vec and no approximate-nearest-neighbour (ANN) index.
 - Move to Postgres + pgvector when any of these becomes true:
   - more than one API or worker process;
@@ -22,4 +22,4 @@ Reviewers must be able to clone the repo and run it with one command, without an
 ## Consequences
 - Only one process writes, so worker throughput is limited. That's acceptable at this volume.
 - The move to Postgres is mostly a change of database URL, because SQLModel abstracts the engine. Vector search moves to pgvector, and the retrieval interface stays the same.
-- The in-memory vector matrix must stay consistent with the table. It is rebuilt at startup and updated in the same code path that writes embeddings.
+- The in-memory vector matrix is rebuilt from the requests and needs at startup (a re-embed whose cost grows with the backlog) and updated on every write that moves a request or creates a need.
