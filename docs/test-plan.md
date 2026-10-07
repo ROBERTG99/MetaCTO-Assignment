@@ -10,7 +10,7 @@ What we prove and how. Flows and formulas are in [spec.md](spec.md). Every flow 
 | API | pytest + FastAPI TestClient, temporary SQLite, FakeLLM | `make check`, CI | Endpoints, status transitions, idempotency, "nothing is deleted" | `backend/tests/api/` |
 | Contract | `make openapi`, then `git diff --exit-code` on the schema and the generated TS types | CI | Frontend and backend agree on the API | `backend/openapi.json`, `frontend/src/api/` |
 | Eval | `evals/` runner on the same pipeline and gateway | `make eval-offline` (free, CI); `make eval` (paid, manual, asks first) | Model and baseline quality, cost, latency | `evals/`, `evals/REPORT.md` |
-| E2E | Playwright (Chromium), offline mode, seeded data | `make e2e`, CI | Golden paths GP1-GP5 | `frontend/e2e/` |
+| E2E | Playwright (Chromium), offline mode, seeded data | `make e2e`, CI | Golden paths GP1-GP6 | `frontend/e2e/` |
 | Hardening | Rate limits, body caps, CORS and headers, request IDs into ai_runs, health and readiness, log redaction, portal data boundary, spend ceiling | `make test`, CI | ADR 0011 | `api/test_hardening_api.py`, `api/test_portal_api.py` |
 | Eval gate | The free offline baseline must stay above `evals/gates.yaml` | `make eval-gate`, CI | REPORT §1 | `evals/gate.py`, `evals/tests/test_gate.py` |
 | Hooks | unittest | `make check-hooks` (with `HOOK_TESTS_REQUIRE_RUFF=1` and backend/.venv/bin on PATH, once the backend exists) | Prompt logging, guard, formatter | `.claude/hooks/test_hooks.py` |
@@ -145,7 +145,7 @@ Written before the pages (2026-10-07) as the contract for them: accessible names
 | GP3 | `e2e/pm-triage.spec.ts` | A gray-zone request (similarity 0.735 to SSO, between 0.651 and 0.767) is a suggestion side by side with SSO, with source and why; the PM accepts; marks one audit-sample auto-link correct; undoes an auto-link after a confirmation, and it leaves the Auto-linked tab | F3, F5; Q6 |
 | GP4 | `e2e/pm-priorities.spec.ts` | The quadrant shows clear wins, strategic bets, popular but off-strategy, park and not rated yet, with every undecided need placed; the SSO row's "Explain score" opens a breakdown whose demand, urgency and strategic-fit sections explain their inputs and whose points add up to the score in the table | F4, §8; R10 |
 | GP5 | `e2e/stakeholder-updates.spec.ts` | The PM marks SSO planned with a reason that says "next quarter" and no date; personal drafts appear (offline template), none sent; Priya's refers to what she asked for and is flagged; the PM fixes and approves every personal draft; AI Ops shows M3 with a value; Priya sees the update on the need page | F7, M3; ADR 0010 |
-| planned | provider failure | The provider fails (a test-only switch, active only when `APP_ENV=test`); the request is in Needs review with the reason; the PM links it by hand | F2 failure path, rule 2 |
+| GP6 | `e2e/provider-failure.spec.ts` | The provider fails (a fault switch that exists only with `APP_ENV=test`, triggered by a marker in the text): the request is saved, the requester sees "Needs review" with a plain reason, the PM sees it in Needs review with the real reason. Linking it by hand isn't built yet | F2 failure path, rule 2 |
 | planned | metrics | The metrics view shows M1, M2, M4, the acceptance rate and the ai_runs cost and latency summary | F8 |
 
 The offline texts were chosen by measuring the real embedder against the seeded backlog, so each lands in its band deterministically; a seed or threshold change can move them, and the spec comments give the measured similarity.

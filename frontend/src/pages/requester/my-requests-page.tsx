@@ -4,14 +4,18 @@ import { useSession } from '@/app/session'
 import { EmptyState, ErrorState, LoadingState } from '@/components/states'
 import { PageHeader } from '@/components/page-header'
 import { StatusBadge } from '@/components/status-badge'
+import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { when } from '@/lib/labels'
 
-import { useMyRequests } from './hooks'
+import { useMyRequests, useNow } from './hooks'
+import { progress } from './progress'
 
 export function MyRequestsPage() {
   const { requesterId } = useSession()
   const requests = useMyRequests(requesterId)
+  const now = useNow()
+  const stuck = progress(requests.data ?? [], now).stuck
 
   return (
     <div>
@@ -48,7 +52,21 @@ export function MyRequestsPage() {
                 </TableCell>
                 <TableCell className="whitespace-normal">
                   <div className="space-y-1">
-                    <StatusBadge status={r.status} kind="request" testId="request-status" />
+                    {stuck.has(r.id) ? (
+                      <>
+                        <Badge variant="destructive" data-testid="request-status">
+                          Stuck
+                        </Badge>
+                        <p className="max-w-xs text-xs text-muted-foreground">
+                          This is taking longer than it should. The product team can see it in their queue.{' '}
+                          <button type="button" className="underline underline-offset-2" onClick={() => void requests.refetch()}>
+                            Check again
+                          </button>
+                        </p>
+                      </>
+                    ) : (
+                      <StatusBadge status={r.status} kind="request" testId="request-status" />
+                    )}
                     {r.needs_review_reason && <p className="max-w-xs text-xs text-muted-foreground">{r.needs_review_reason}</p>}
                   </div>
                 </TableCell>

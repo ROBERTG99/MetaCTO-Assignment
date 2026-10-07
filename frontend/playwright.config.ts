@@ -11,7 +11,7 @@ export const API_URL = `http://127.0.0.1:${API_PORT}`
 const backend = [
   'cd ../backend',
   'mkdir -p data',
-  'export DATABASE_URL=sqlite:///./data/e2e.db AI_MODE=offline HF_HUB_OFFLINE=1',
+  'export DATABASE_URL=sqlite:///./data/e2e.db AI_MODE=offline APP_ENV=test HF_HUB_OFFLINE=1',
   'uv run python -m seed.load',
   `uv run uvicorn app.main:app --host 127.0.0.1 --port ${API_PORT} --no-access-log`,
 ].join(' && ')

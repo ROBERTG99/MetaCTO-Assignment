@@ -13,6 +13,7 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./data/distill.db"
     ai_mode: Literal["offline", "live"] = "offline"
+    app_env: Literal["development", "test", "production"] = "development"  # test enables the e2e fault switch
     anthropic_api_key: SecretStr | None = None  # from the environment or .env; never logged
     fast_model: str = "claude-haiku-4-5"
     smart_model: str = "claude-sonnet-5-5"

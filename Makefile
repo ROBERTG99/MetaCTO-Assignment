@@ -1,4 +1,4 @@
-.PHONY: setup setup-backend setup-web audit eval-gate dev dev-api dev-web test lint typecheck typecheck-web check check-hooks e2e gen-api seed seed-raw seed-live openapi rank eval-offline eval-tune eval eval-compare eval-fit-report snapshot
+.PHONY: test-web setup setup-backend setup-web audit eval-gate dev dev-api dev-web test lint typecheck typecheck-web check check-hooks e2e gen-api seed seed-raw seed-live openapi rank eval-offline eval-tune eval eval-compare eval-fit-report snapshot
 
 BACKEND := cd backend &&
 
@@ -36,6 +36,9 @@ gen-api:
 typecheck-web:
 	$(WEB) npm run typecheck
 
+test-web:
+	$(WEB) npm test
+
 test:
 	$(BACKEND) uv run pytest
 
@@ -45,8 +48,8 @@ lint:
 typecheck:
 	$(BACKEND) uv run mypy
 
-# Full gate: lint, types, tests, hook tests, frontend types
-check: lint typecheck test check-hooks typecheck-web
+# Full gate: lint, types, tests, hook tests, frontend types and unit tests
+check: lint typecheck test check-hooks typecheck-web test-web
 
 # Claude Code hook tests, with the project's ruff on PATH so the formatter tests run instead of skip
 check-hooks:

@@ -711,6 +711,21 @@ class OfflineClient:
         return Reply(out, Usage(0, 0), "offline-baseline")
 
 
+class FaultInjectingClient:
+    """Test only (APP_ENV=test, wired in factory.make_client): text containing MARKER fails like a provider
+    refusal, so the end-to-end specs can drive the failure path (needs_review) without a network."""
+
+    MARKER = "[simulate-provider-failure]"
+
+    def __init__(self, inner: LLMClient) -> None:
+        self.inner, self.name = inner, f"faulty-{inner.name}"
+
+    def complete(self, **kw: Any) -> Reply:
+        if self.MARKER in str(kw.get("inputs", {}).get("text", "")):
+            raise TerminalError("simulated provider failure (test environment)")
+        return self.inner.complete(**kw)
+
+
 def recorder(engine: Any) -> Recorder:
     """Write each AIRun in its own transaction, so failed calls are recorded even when the pipeline rolls back."""
     from sqlmodel import Session

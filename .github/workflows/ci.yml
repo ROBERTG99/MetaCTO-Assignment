@@ -75,6 +75,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
         working-directory: frontend
+      - name: Unit tests
+        run: npm test
+        working-directory: frontend
       - name: Build
         run: npm run build
         working-directory: frontend

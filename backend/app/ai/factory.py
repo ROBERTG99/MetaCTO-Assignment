@@ -7,14 +7,33 @@ from sqlalchemy.engine import Engine
 
 from app.ai.baseline import load_thresholds
 from app.ai.embeddings import FastEmbedder
-from app.ai.gateway import AnthropicClient, Gateway, LLMClient, OfflineClient, StepConfig, recorder
+from app.ai.gateway import (
+    AnthropicClient,
+    FaultInjectingClient,
+    Gateway,
+    LLMClient,
+    OfflineClient,
+    StepConfig,
+    recorder,
+)
 from app.ai.index import NeedSearch
 from app.ai.pipeline import Deps
 from app.ai.policy import load_routing
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.scoring import load_priorities
 
 CONFIG = Path(__file__).resolve().parents[3] / "config"
+
+
+def make_client(settings: Settings) -> LLMClient:
+    """The provider client for AI_MODE. In APP_ENV=test only, wrapped so marked text fails (e2e failure path)."""
+    key = settings.anthropic_api_key.get_secret_value() if settings.anthropic_api_key else None
+    client: LLMClient = (
+        AnthropicClient(settings.llm_timeout_seconds, settings.llm_max_retries, api_key=key)
+        if settings.ai_mode == "live"
+        else OfflineClient()
+    )
+    return FaultInjectingClient(client) if settings.app_env == "test" else client
 
 
 def build_deps(engine: Engine, config: Path = CONFIG) -> Deps:
@@ -23,12 +42,7 @@ def build_deps(engine: Engine, config: Path = CONFIG) -> Deps:
     llm = yaml.safe_load(routing_file.read_text(encoding="utf-8"))["llm"]
     model = {"fast": settings.fast_model, "smart": settings.smart_model}
     live = settings.ai_mode == "live"
-    key = settings.anthropic_api_key.get_secret_value() if settings.anthropic_api_key else None
-    client: LLMClient = (
-        AnthropicClient(settings.llm_timeout_seconds, settings.llm_max_retries, api_key=key)
-        if live
-        else OfflineClient()
-    )
+    client = make_client(settings)
     priorities = load_priorities(config / "priorities.yaml")
     steps = {
         "extract": StepConfig(model[llm["models"]["extract"]] if live else "offline-baseline", 2000),

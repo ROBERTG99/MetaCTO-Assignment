@@ -9,6 +9,20 @@ const api = process.env.API_URL ?? 'http://127.0.0.1:8000'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': path.resolve(import.meta.dirname, './src') } },
+  build: {
+    rolldownOptions: {
+      output: {
+        // vendor code in a few long-cached chunks; each role's pages are lazy chunks (src/app/lazy-pages.tsx)
+        codeSplitting: {
+          groups: [
+            { name: 'react', test: /node_modules[\\/](react|react-dom|scheduler|react-router)[\\/]/ },
+            { name: 'ui', test: /node_modules[\\/](radix-ui|@radix-ui|lucide-react|sonner|cn|class-variance-authority)[\\/]/ },
+            { name: 'data', test: /node_modules[\\/](@tanstack|openapi-fetch)[\\/]/ },
+          ],
+        },
+      },
+    },
+  },
   server: {
     port: Number(process.env.WEB_PORT ?? 5173),
     strictPort: true,

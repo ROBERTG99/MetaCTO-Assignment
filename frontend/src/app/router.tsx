@@ -3,8 +3,16 @@ import { createBrowserRouter, Navigate } from 'react-router'
 import { Layout } from '@/app/layout'
 import { useSession } from '@/app/session'
 import { NotBuilt } from '@/pages/not-built'
-import { OpsPage, PmNeedPage, PrioritiesPage, TriagePage } from '@/pages/pm'
-import { ExplorePage, MyRequestsPage, RequesterNeedPage, SubmitPage } from '@/pages/requester'
+import {
+  ExplorePage,
+  MyRequestsPage,
+  OpsPage,
+  PmNeedPage,
+  PrioritiesPage,
+  RequesterNeedPage,
+  SubmitPage,
+  TriagePage,
+} from '@/app/lazy-pages'
 
 function Home() {
   const { role } = useSession()

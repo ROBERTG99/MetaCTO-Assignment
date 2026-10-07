@@ -8,7 +8,7 @@ const CLEAN = 'Thanks for asking about single sign-on. We have marked it as plan
 const FOR_PRIYA = 'Hi Priya, your SAML SSO with Okta request is now planned: enterprise rollouts depend on it.'
 const CS_NOTE = 'Internal: SSO is planned; tell Northwind it is on the roadmap without a date.'
 
-test('the PM marks SSO planned, fixes a flagged commitment, approves, and the requester sees the update', async ({ page }) => {
+test('the PM marks SSO planned, fixes a flagged commitment, approves, and the requester sees the update', async ({ page, browser }, testInfo) => {
   await actAsPM(page)
   await page.getByRole('link', { name: 'Browse needs' }).click()
   await page.getByLabel('Search needs').fill('SAML SSO with Okta')
@@ -38,6 +38,13 @@ test('the PM marks SSO planned, fixes a flagged commitment, approves, and the re
   await expect(priya.getByRole('status', { name: 'Flagged commitments' })).toContainText('next quarter')
   await expect(priya.getByRole('button', { name: 'Approve and send' })).toBeDisabled()
 
+  // Priya already has the need open in her own browser: the update must reach it without a reload.
+  const priyaContext = await browser.newContext({ baseURL: testInfo.project.use.baseURL })
+  const priyaPage = await priyaContext.newPage()
+  await actAsRequester(priyaPage, 'Priya Raman')
+  await priyaPage.goto(needUrl)
+  await expect(priyaPage.getByRole('region', { name: 'Updates' })).toContainText('No updates yet')
+
   // The PM fixes every personal draft, saves (the check runs again) and approves.
   for (let i = 0; i < total; i++) {
     const draft = drafts.nth(i)
@@ -56,6 +63,9 @@ test('the PM marks SSO planned, fixes a flagged commitment, approves, and the re
   await note.getByRole('button', { name: 'Save changes' }).click()
   await note.getByRole('button', { name: 'Approve and send' }).click()
   await expect(note).toContainText('in the outbox')
+
+  await expect(priyaPage.getByRole('region', { name: 'Updates' })).toContainText(FOR_PRIYA, { timeout: 20_000 })
+  await priyaContext.close()
 
   // AI Ops: decision-loop latency is now measured from these timestamps.
   await page.getByRole('link', { name: 'AI Ops' }).click()

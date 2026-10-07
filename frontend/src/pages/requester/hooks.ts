@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react'
 import { api, unwrap, type Schemas } from '@/api/client'
 import { keys, useRequesters } from '@/api/queries'
 
+import { progress } from './progress'
+
 export type MyRequest = Schemas['MyRequest']
 export type Severity = Schemas['Severity']
 
@@ -35,8 +37,8 @@ export function useMyRequests(requesterId: number | null) {
     queryKey: keys.myRequests(requesterId ?? 0),
     queryFn: async () => unwrap(await api.GET('/requests', { params: { query: { requester_id: requesterId ?? 0 } } })),
     enabled: requesterId != null,
-    refetchInterval: (query) =>
-      query.state.data?.some((r) => r.status === 'pending' || r.status === 'processing') ? 2000 : false,
+    // poll while something fresh is in flight; a request stuck past the timeout stops the polling (progress.ts)
+    refetchInterval: (query) => (progress(query.state.data ?? [], Date.now()).poll ? 2000 : false),
   })
 }
 
@@ -89,5 +91,18 @@ export function usePortalNeed(needId: number, requesterId: number | null) {
         }),
       ),
     enabled: Number.isFinite(needId) && needId > 0,
+    // an update a PM approves elsewhere shows up without a reload (same-browser approvals invalidate the key)
+    refetchInterval: 10_000,
+    refetchOnWindowFocus: true,
   })
+}
+
+/** The current time, refreshed every 15 s: lets a row turn "stuck" on screen even after polling stopped. */
+export function useNow(everyMs = 15_000): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), everyMs)
+    return () => window.clearInterval(id)
+  }, [everyMs])
+  return now
 }
