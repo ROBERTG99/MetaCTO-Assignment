@@ -1,0 +1,1151 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Distill API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/requests": {
+      "post": {
+        "tags": [
+          "requests"
+        ],
+        "summary": "Submit a feature request",
+        "description": "Saves the request as `pending` and returns at once; the intake workflow runs later.",
+        "operationId": "create_request_requests_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/needs": {
+      "get": {
+        "tags": [
+          "needs"
+        ],
+        "summary": "Find needs",
+        "operationId": "list_needs_needs_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Text in the need or its member requests",
+              "title": "Q"
+            },
+            "description": "Text in the need or its member requests"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/NeedStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "product_area",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Product Area"
+            }
+          },
+          {
+            "name": "segment",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Segment"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Needs with a request or confirmed support from it",
+              "title": "Segment"
+            },
+            "description": "Needs with a request or confirmed support from it"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "priority",
+                "support",
+                "recent"
+              ],
+              "type": "string",
+              "default": "priority",
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NeedPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    },
+    "/needs/{need_id}": {
+      "get": {
+        "tags": [
+          "needs"
+        ],
+        "summary": "Get Need",
+        "operationId": "get_need_needs__need_id__get",
+        "parameters": [
+          {
+            "name": "need_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Need Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NeedDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    },
+    "/needs/{need_id}/support": {
+      "post": {
+        "tags": [
+          "needs"
+        ],
+        "summary": "Add support (a requester claim)",
+        "description": "201 the first time, 200 on a repeat by the same requester. Not counted until confirmed. 409 if the need was merged into another one.",
+        "operationId": "add_support_needs__need_id__support_post",
+        "parameters": [
+          {
+            "name": "need_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Need Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupportCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportOut"
+                }
+              }
+            }
+          },
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AccountOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "segment": {
+            "$ref": "#/components/schemas/Segment"
+          },
+          "arr": {
+            "type": "integer",
+            "title": "Arr"
+          },
+          "is_prospect": {
+            "type": "boolean",
+            "title": "Is Prospect"
+          },
+          "pipeline_value": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pipeline Value"
+          },
+          "renewal_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renewal Date"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "segment",
+          "arr",
+          "is_prospect",
+          "pipeline_value",
+          "renewal_date"
+        ],
+        "title": "AccountOut"
+      },
+      "ErrorDetail": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "issue": {
+            "type": "string",
+            "title": "Issue"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field",
+          "issue"
+        ],
+        "title": "ErrorDetail"
+      },
+      "ErrorInfo": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "details": {
+            "items": {
+              "$ref": "#/components/schemas/ErrorDetail"
+            },
+            "type": "array",
+            "title": "Details",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorInfo"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorInfo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse"
+      },
+      "NeedDetail": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "problem": {
+            "type": "string",
+            "title": "Problem"
+          },
+          "persona": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona"
+          },
+          "product_area": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Area"
+          },
+          "status": {
+            "$ref": "#/components/schemas/NeedStatus"
+          },
+          "priority_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority Score"
+          },
+          "support_count": {
+            "type": "integer",
+            "title": "Support Count",
+            "description": "Distinct requesters with a member request or a confirmed support. Staff filing for several customers count once; account_count shows the customers."
+          },
+          "claimed_support_count": {
+            "type": "integer",
+            "title": "Claimed Support Count",
+            "description": "Supports still waiting for the intake workflow to confirm them"
+          },
+          "request_count": {
+            "type": "integer",
+            "title": "Request Count"
+          },
+          "account_count": {
+            "type": "integer",
+            "title": "Account Count"
+          },
+          "last_request_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Request At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "job_to_be_done": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job To Be Done"
+          },
+          "merged_into_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merged Into Id"
+          },
+          "demand": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Demand"
+          },
+          "urgency": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Urgency"
+          },
+          "strategic_fit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategic Fit"
+          },
+          "requests": {
+            "items": {
+              "$ref": "#/components/schemas/NeedRequestOut"
+            },
+            "type": "array",
+            "title": "Requests"
+          },
+          "supports": {
+            "items": {
+              "$ref": "#/components/schemas/SupportOut"
+            },
+            "type": "array",
+            "title": "Supports"
+          },
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/AccountOut"
+            },
+            "type": "array",
+            "title": "Accounts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "problem",
+          "persona",
+          "product_area",
+          "status",
+          "priority_score",
+          "support_count",
+          "claimed_support_count",
+          "request_count",
+          "account_count",
+          "last_request_at",
+          "created_at",
+          "job_to_be_done",
+          "merged_into_id",
+          "demand",
+          "urgency",
+          "strategic_fit",
+          "requests",
+          "supports",
+          "accounts"
+        ],
+        "title": "NeedDetail"
+      },
+      "NeedPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NeedSummary"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "NeedPage"
+      },
+      "NeedRequestOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "source": {
+            "$ref": "#/components/schemas/RequestSource"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RequestStatus"
+          },
+          "requester_name": {
+            "type": "string",
+            "title": "Requester Name"
+          },
+          "account_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Name"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "description",
+          "source",
+          "status",
+          "requester_name",
+          "account_name",
+          "created_at"
+        ],
+        "title": "NeedRequestOut"
+      },
+      "NeedStatus": {
+        "type": "string",
+        "enum": [
+          "open",
+          "planned",
+          "in_progress",
+          "shipped",
+          "declined",
+          "merged"
+        ],
+        "title": "NeedStatus"
+      },
+      "NeedSummary": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "problem": {
+            "type": "string",
+            "title": "Problem"
+          },
+          "persona": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona"
+          },
+          "product_area": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Area"
+          },
+          "status": {
+            "$ref": "#/components/schemas/NeedStatus"
+          },
+          "priority_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority Score"
+          },
+          "support_count": {
+            "type": "integer",
+            "title": "Support Count",
+            "description": "Distinct requesters with a member request or a confirmed support. Staff filing for several customers count once; account_count shows the customers."
+          },
+          "claimed_support_count": {
+            "type": "integer",
+            "title": "Claimed Support Count",
+            "description": "Supports still waiting for the intake workflow to confirm them"
+          },
+          "request_count": {
+            "type": "integer",
+            "title": "Request Count"
+          },
+          "account_count": {
+            "type": "integer",
+            "title": "Account Count"
+          },
+          "last_request_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Request At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "problem",
+          "persona",
+          "product_area",
+          "status",
+          "priority_score",
+          "support_count",
+          "claimed_support_count",
+          "request_count",
+          "account_count",
+          "last_request_at",
+          "created_at"
+        ],
+        "title": "NeedSummary"
+      },
+      "RequestCreate": {
+        "properties": {
+          "requester_id": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Requester Id"
+          },
+          "account_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 9.223372036854776e+18,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Id",
+            "description": "The customer this is for. Required when staff submit for support, sales or cs."
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 5000,
+            "title": "Description",
+            "default": ""
+          },
+          "source": {
+            "$ref": "#/components/schemas/RequestSource"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "requester_id",
+          "title",
+          "source"
+        ],
+        "title": "RequestCreate"
+      },
+      "RequestOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "requester_id": {
+            "type": "integer",
+            "title": "Requester Id"
+          },
+          "account_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Id"
+          },
+          "source": {
+            "$ref": "#/components/schemas/RequestSource"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RequestStatus"
+          },
+          "need_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Need Id"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem"
+          },
+          "persona": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona"
+          },
+          "job_to_be_done": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job To Be Done"
+          },
+          "proposed_solution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposed Solution"
+          },
+          "product_area": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Area"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "requester_id",
+          "account_id",
+          "source",
+          "title",
+          "description",
+          "status",
+          "need_id",
+          "problem",
+          "persona",
+          "job_to_be_done",
+          "proposed_solution",
+          "product_area",
+          "created_at"
+        ],
+        "title": "RequestOut"
+      },
+      "RequestSource": {
+        "type": "string",
+        "enum": [
+          "portal",
+          "support",
+          "sales",
+          "cs",
+          "internal"
+        ],
+        "title": "RequestSource"
+      },
+      "RequestStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "processing",
+          "processed",
+          "needs_review"
+        ],
+        "title": "RequestStatus"
+      },
+      "Segment": {
+        "type": "string",
+        "enum": [
+          "enterprise",
+          "mid_market",
+          "smb"
+        ],
+        "title": "Segment"
+      },
+      "Severity": {
+        "type": "string",
+        "enum": [
+          "nice_to_have",
+          "important",
+          "blocker"
+        ],
+        "title": "Severity"
+      },
+      "SupportCreate": {
+        "properties": {
+          "requester_id": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Requester Id"
+          },
+          "why_it_matters": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why It Matters",
+            "description": "Omit on a repeat to keep the stored reason"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "requester_id",
+          "severity"
+        ],
+        "title": "SupportCreate"
+      },
+      "SupportLinkStatus": {
+        "type": "string",
+        "enum": [
+          "claimed",
+          "confirmed",
+          "disputed",
+          "rejected"
+        ],
+        "title": "SupportLinkStatus"
+      },
+      "SupportOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "need_id": {
+            "type": "integer",
+            "title": "Need Id"
+          },
+          "requester_id": {
+            "type": "integer",
+            "title": "Requester Id"
+          },
+          "requester_name": {
+            "type": "string",
+            "title": "Requester Name"
+          },
+          "account_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Name"
+          },
+          "why_it_matters": {
+            "type": "string",
+            "title": "Why It Matters"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "link_status": {
+            "$ref": "#/components/schemas/SupportLinkStatus"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "need_id",
+          "requester_id",
+          "requester_name",
+          "account_name",
+          "why_it_matters",
+          "severity",
+          "link_status",
+          "created_at"
+        ],
+        "title": "SupportOut"
+      }
+    }
+  }
+}

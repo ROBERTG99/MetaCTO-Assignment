@@ -7,13 +7,13 @@ Auto-linking is what removes PM work (metric M1). A false merge, though, silentl
 
 ## Decision
 - **Three bands, on the routing score (ADR 0003).**
-  - At or above T_auto (start high: 0.90): auto_linked, labelled with its source, score and rationale, listed in the inbox's read-only Auto-linked tab, and undoable in one click.
+  - At or above T_auto (start high: 0.90): auto-linked (need_id set, suggestion `applied`), labelled with its source, score and rationale, listed in the inbox's read-only Auto-linked tab, and undoable in one click.
   - Between T_suggest and T_auto: a suggestion in the PM inbox.
   - Below T_suggest: a new need, with related candidates shown on the request as a suggestion only.
   - Matches CLAUDE.md rule 2.
 - **Audit sample.** An auto-link is sampled when `sha256(request_id) mod 10 == 0`, about 10%, reproducible and testable. Sampled links appear in the inbox's Audit tab, and the PM marks each correct or false_merge; that gives metric M4 with a Wilson interval. A false_merge verdict also undoes the link, so it stops counting as demand, and the request returns to Suggestions.
-- **Requester claims.** The claimed need is always added to the adjudicated candidates. A claimed link starts active. It stays confirmed only if the adjudicator says same_need and the score is at least T_suggest; otherwise it becomes disputed, goes to the inbox, and is excluded from demand until a PM decides. The same happens if the request ends in needs_review.
-- **Nothing is deleted.** Links move between proposed, active, disputed, rejected and undone, and every change is an event (rule 6).
+- **Requester claims.** "This is my need" creates a support in `claimed` state, which doesn't count as demand. The claimed need is always added to the adjudicated candidates. The claim becomes `confirmed` only if the adjudicator says same_need and the score is at least T_suggest. Otherwise it becomes `disputed` and goes to the inbox, still uncounted, until a PM decides.
+- **Nothing is deleted.** `request.need_id` and `support.link_status` hold the current state, and `aisuggestion.state` holds the decision (proposed, applied, accepted, rejected, undone). Every link and unlink is a row in the append-only `linkevent` table, with who made it (auto, pm, requester_claim), when, and the routing score (rule 6).
 - **Thresholds come from evals.** They are set on the dev split and confirmed on the test split. They are lowered only when the audited false-merge upper bound stays within target.
 
 ## Alternatives rejected

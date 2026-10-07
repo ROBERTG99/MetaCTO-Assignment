@@ -18,7 +18,7 @@ flowchart LR
     Gateway["app/ai/gateway.py<br/>the only provider caller;<br/>writes ai_runs"]
     Embedder["Embedder<br/>fastembed bge-small (local)"]
   end
-  DB[("SQLite (WAL)<br/>tables, job queue,<br/>event log, vectors")]
+  DB[("SQLite (WAL)<br/>tables, request queue,<br/>link history, vectors")]
   Config["config/*.yaml<br/>routing, priorities, goals"]
   Anthropic["Anthropic API<br/>(AI_MODE=live)"]
   Offline["Offline provider<br/>heuristics and baseline<br/>(AI_MODE=offline, default)"]
@@ -26,7 +26,7 @@ flowchart LR
 
   SPA -->|HTTP/JSON| Routes --> Services --> DB
   Services -->|"suggest (no LLM)"| Embedder
-  Worker -->|claim job| DB
+  Worker -->|claim pending row| DB
   Worker --> Pipeline
   Pipeline --> Embedder
   Pipeline --> Scoring
@@ -61,13 +61,15 @@ sequenceDiagram
   API-->>UI: top 5 needs (problem plus persona)
   alt "This is my need"
     R->>UI: claim need N, with why and severity
-    UI->>API: POST /requests {claimed_need_id: N}
+    UI->>API: POST /needs/N/support
+    API->>DB: support(claimed) + LinkEvent(link, requester_claim)
+    API-->>UI: 201 (or 200 on a repeat); counted only once confirmed
   else New request
     UI->>API: POST /requests
+    API->>DB: request(pending)
+    API-->>UI: 201 (saved before any model call)
   end
-  API->>DB: one transaction: request(pending, redacted_text) + claimed link(active)? + support? + job(queued) + event
-  API-->>UI: 201 (saved before any model call)
-  W->>DB: claim the oldest queued job (state=running, attempts+1)
+  W->>DB: claim the oldest pending row (processing, attempts+1, claimed_at)
   W->>P: run(request)
   P->>P: embed redacted text, retrieve top 5 needs (+ the claimed need)
   P->>G: extract (text inside XML tags)
@@ -80,20 +82,20 @@ sequenceDiagram
   G->>DB: ai_run
   P->>P: verify quotes, route (score vs thresholds), enrich, score
   alt success
-    W->>DB: one transaction: extraction, links, request status, events, job done
+    W->>DB: one transaction: AI fields, need_id, aisuggestion, LinkEvent, status processed
   else transient error, attempts < N
-    W->>DB: job queued again, available_at = now + backoff, last_error
+    W->>DB: back to pending with backoff, last_error
   else refusal, second max_tokens or validation failure, or attempts = N
-    W->>DB: request needs_review (reason), active claim disputed, job failed, event
+    W->>DB: request needs_review (reason)
   end
-  Note over W,DB: On startup, running jobs older than the lease go back to queued.
+  Note over W,DB: On startup, processing rows older than the lease go back to pending.
 ```
 
 ## Decision brief with the overlap agent (should)
 
 ```mermaid
 flowchart TD
-  A["PM: Generate brief for need N"] --> B["job(kind=brief) queued"]
+  A["PM: Generate brief for need N"] --> B["brief row queued (pending)"]
   B --> C["Gather facts in code:<br/>need, requests, supports, accounts,<br/>D/U/S components, goals"]
   C --> D{"Overlap agent enabled?"}
   D -- yes --> E["Agent loop (gateway.agent_step)<br/>read-only tools: search_needs, get_need, list_requests<br/>step cap 8, no write tools"]

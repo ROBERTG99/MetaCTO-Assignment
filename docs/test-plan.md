@@ -34,6 +34,8 @@ No test calls a real model (CLAUDE.md rule 8). Unit and API tests inject FakeLLM
 | Metric computations M1-M4, acceptance rate, Wilson interval | `unit/test_metrics.py` |
 | Eval metric functions: precision, coverage, recall@5 | `unit/test_eval_metrics.py` |
 | Frozen test split: hash unchanged | `unit/test_eval_freeze.py` |
+| Seed data: every request labelled, clusters of two or more, references exist, the Excel split on both sides, the loader loads raw data only (passing) | `unit/test_seed_data.py` |
+| SQLite in WAL mode with foreign keys (passing) | `unit/test_db.py` |
 
 **API modules** (written alongside the endpoints, from the transitions in spec §5):
 
@@ -115,8 +117,8 @@ No test calls a real model (CLAUDE.md rule 8). Unit and API tests inject FakeLLM
 
 | ID | Path | Proves |
 |---|---|---|
-| GP1 | The requester types; matching needs appear (problem plus persona); "this is my need" plus why and severity; the claim is confirmed; their support shows on the need page | F0, F1, F3 (claims) |
-| GP2 | A new request is auto-linked; the PM finds it in the read-only Auto-linked tab, with its label, score and rationale; the PM undoes it; the link is undone (not deleted) and the request is back in Suggestions | F2, F3, F5 |
+| GP1 | The requester types; matching needs appear (problem plus persona); "this is my need" plus why and severity; the support shows as claimed and not counted; once the worker confirms it, it counts on the need page | F0, F1, F3 (claims) |
+| GP2 | A new request is auto-linked; the PM finds it in the read-only Auto-linked tab, with its label, score and rationale; the PM undoes it; an unlink LinkEvent is recorded (nothing deleted) and the request is back in Suggestions | F2, F3, F5 |
 | GP3 | A gray-zone request shows in the inbox side by side; the PM accepts; demand and the score breakdown on the need update | F0, F4, F5 |
 | GP4 | The provider fails (a test-only switch, active only when `APP_ENV=test`); the request is in Needs review with the reason; the PM links it by hand | F2 failure path, rule 2 |
 | GP5 | A sampled auto-link appears in the Audit tab; the PM marks it false_merge; the link is undone, the request is back in Suggestions, and M4 in the metrics view updates | F3 audit, F8, M4 |

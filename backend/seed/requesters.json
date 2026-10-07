@@ -1,0 +1,170 @@
+[
+ {
+  "ref": "priya",
+  "name": "Priya Raman",
+  "role": "IT Director",
+  "account": "northwind"
+ },
+ {
+  "ref": "marcus",
+  "name": "Marcus Lee",
+  "role": "Finance Controller",
+  "account": "northwind"
+ },
+ {
+  "ref": "jo",
+  "name": "Jo Becker",
+  "role": "Operations Manager",
+  "account": "northwind"
+ },
+ {
+  "ref": "sandra",
+  "name": "Sandra Okafor",
+  "role": "Security & Compliance Lead",
+  "account": "helix"
+ },
+ {
+  "ref": "tom",
+  "name": "Tom Reyes",
+  "role": "BI Analyst",
+  "account": "helix"
+ },
+ {
+  "ref": "hugo",
+  "name": "Hugo Lindqvist",
+  "role": "Head of IT Infrastructure",
+  "account": "meridian"
+ },
+ {
+  "ref": "elena",
+  "name": "Elena Petrova",
+  "role": "FP&A Manager",
+  "account": "meridian"
+ },
+ {
+  "ref": "raj",
+  "name": "Raj Patel",
+  "role": "Risk Analyst",
+  "account": "meridian"
+ },
+ {
+  "ref": "megan",
+  "name": "Megan Doyle",
+  "role": "Head of Ecommerce",
+  "account": "contoso"
+ },
+ {
+  "ref": "luis",
+  "name": "Luis Ortega",
+  "role": "Data Engineer",
+  "account": "contoso"
+ },
+ {
+  "ref": "aisha",
+  "name": "Aisha Khan",
+  "role": "VP Customer Success",
+  "account": "bluepeak"
+ },
+ {
+  "ref": "dev",
+  "name": "Dev Malhotra",
+  "role": "IT Administrator",
+  "account": "bluepeak"
+ },
+ {
+  "ref": "hannah",
+  "name": "Hannah Schultz",
+  "role": "Finance Lead",
+  "account": "orchard"
+ },
+ {
+  "ref": "sam",
+  "name": "Sam Whitaker",
+  "role": "Store Operations",
+  "account": "orchard"
+ },
+ {
+  "ref": "carlos",
+  "name": "Carlos Mendes",
+  "role": "Operations Director",
+  "account": "atlas"
+ },
+ {
+  "ref": "lucia",
+  "name": "Lucía Fernández",
+  "role": "Coordinadora de Logística",
+  "account": "atlas"
+ },
+ {
+  "ref": "zoe",
+  "name": "Zoe Carter",
+  "role": "Account Director",
+  "account": "lumen"
+ },
+ {
+  "ref": "benito",
+  "name": "Ben Ito",
+  "role": "Marketing Analyst",
+  "account": "lumen"
+ },
+ {
+  "ref": "rosa",
+  "name": "Rosa Bianchi",
+  "role": "Owner",
+  "account": "tinybakery"
+ },
+ {
+  "ref": "kai",
+  "name": "Kai Nakamura",
+  "role": "Founder",
+  "account": "pixelforge"
+ },
+ {
+  "ref": "femi",
+  "name": "Femi Adeyemi",
+  "role": "Practice Owner",
+  "account": "greenway"
+ },
+ {
+  "ref": "lily",
+  "name": "Lily Tran",
+  "role": "Office Manager",
+  "account": "greenway"
+ },
+ {
+  "ref": "kofi",
+  "name": "Kofi Mensah",
+  "role": "Independent Consultant",
+  "account": "soletrader"
+ },
+ {
+  "ref": "jess",
+  "name": "Jess Morgan",
+  "role": "Support Engineer",
+  "account": null
+ },
+ {
+  "ref": "mia",
+  "name": "Mia Santos",
+  "role": "Support Lead",
+  "account": null
+ },
+ {
+  "ref": "ryan",
+  "name": "Ryan Cho",
+  "role": "Account Executive",
+  "account": null
+ },
+ {
+  "ref": "olivia",
+  "name": "Olivia Grant",
+  "role": "Customer Success Manager",
+  "account": null
+ },
+ {
+  "ref": "theo",
+  "name": "Theo Walsh",
+  "role": "Product Designer",
+  "account": null
+ }
+]

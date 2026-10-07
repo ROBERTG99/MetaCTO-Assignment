@@ -42,8 +42,8 @@ Must = the golden path and is built first. Should = built only after the golden 
 
 | ID | Flow | Level | Proven by |
 |---|---|---|---|
-| F0 | **Browse, search and support.** List and search needs. The need page shows member requests, supporters, the score breakdown, and every AI value with its source, confidence and rationale. Support records why it matters and a severity, and is idempotent per requester. | must | API tests (needs, support); e2e GP1 and GP3 |
-| F1 | **Dedupe at the door (simple).** While the requester types, show the 5 closest needs, phrased as problem plus persona. This uses embeddings only and no LLM, under 300 ms server-side. "This is my need" saves the request with a **requester-claimed link** plus support. | must | API test (suggest never calls the gateway; ranking); e2e GP1; metric M2 (door deflection) |
+| F0 | **Browse, search and support.** `GET /needs` gives text search, filters (status, product area, segment), sorting (priority, support, recent) and pagination. The need page shows member requests, supports and accounts, the score breakdown, and every AI value with its source, confidence and rationale. `POST /needs/{id}/support` records why it matters and a severity (nice_to_have, important, blocker). It is idempotent per requester and creates a claim that counts only once confirmed. | must | `api/test_needs_api.py`, `api/test_support_api.py` (passing); e2e GP1 and GP3 |
+| F1 | **Dedupe at the door (simple).** While the requester types, show the 5 closest needs, phrased as problem plus persona. This uses embeddings only and no LLM, under 300 ms server-side. "This is my need" calls the support endpoint, which creates a **requester claim** (a support in `claimed` state) that the intake workflow checks. Otherwise the requester submits a new request (`POST /requests`, saved as pending). | must | `api/test_requests_api.py` (passing); suggest API test (never calls the gateway; ranking); e2e GP1; metric M2 |
 | F2 | **Intake workflow** (background, after save): redact, embed, retrieve, extract, adjudicate, route, enrich, score (section 6). | must | Unit tests per deterministic step and for the worker; evals (extraction, retrieval recall@5, adjudication); e2e GP4 (failure path) |
 | F3 | **Confidence policy.** Routing score (section 8) produces: auto-link (labelled, undoable, 10% audit sample), suggestion in the inbox, or new need. A requester-claimed link is confirmed or disputed. | must | Unit tests (routing, policy, audit sampling); threshold choice in evals/REPORT.md; metric M4; e2e GP2 and GP5 |
 | F4 | **Prioritization.** Demand, urgency and score are computed in code (must). Strategic fit is rated by the model against config/goals.yaml, with the quote verified in code (should). Popular and strategic are shown separately. | must (computed) / should (fit) | Scoring unit tests; quote-verifier unit test; strategic-fit eval slice (should) |
@@ -54,50 +54,48 @@ Must = the golden path and is built first. Should = built only after the golden 
 
 ## 5. Data model
 
-All tables live in SQLite. Nothing an AI produced is ever deleted: links change state, and every change is an event.
+All tables live in SQLite (`backend/app/models.py`). Current state lives on the row (`request.need_id`, `support.link_status`, `aisuggestion.state`). How it got there lives in **`linkevent`**, an append-only history that undo, the audit sample and the AI audit trail read. Nothing an AI produced is ever deleted.
 
 | Table | Key fields | Notes |
 |---|---|---|
-| account | id, name, segment (enterprise, mid_market, smb, prospect), arr, pipeline_value, renewal_date | The seeded "CRM". Enrichment reads it in code. |
-| requester | id, name, role, account_id | No auth: the demo has a persona switcher (assumption A3). |
-| need | id, title (problem plus persona), problem, persona, job_to_be_done, product_area, status (open, planned, in_progress, shipped, declined, merged), merged_into_id, created_by (ai, pm), source_extraction_id | Status is set only by a PM, except `merged` (below). An AI-created need shows its source extraction's confidence and rationale. Merged needs are excluded from list, search, suggestions and retrieval. |
-| request | id, requester_id, title, description, why_it_matters, redacted_text, severity (blocker, workaround, nice_to_have), claimed_need_id, status (see below), needs_review_reason | Saved before any model call. redacted_text is computed at save (rule 9). |
-| extraction | request_id, problem, persona, job_to_be_done, proposed_solution, product_area, severity_signals, evidence (a quote per field, verified in code), model_confidence, rationale, source (llm, offline_baseline, recorded), ai_run_id | Validated by Pydantic before it is persisted. For extracted fields, "confidence" means the model's stated confidence plus whether each evidence quote verified. |
-| link | id, request_id, need_id, source (ai_auto, ai_suggested, ai_new_need, ai_related, requester_claimed, pm_manual), state (proposed, active, disputed, rejected, undone, related), routing_score, label, model_confidence, rationale, quotes, audit_sampled, audit_verdict (correct, false_merge), decided_by, decided_at | Never deleted. Only active links count as demand. Only proposed and disputed links appear in the action tabs. `related` links are informational. |
-| support | need_id, requester_id, why_it_matters, severity | Unique per (need, requester), so support is idempotent. |
-| embedding | owner_type (request, need_canonical), owner_id, model, text_hash, vector (float32 BLOB) | One vector per request and one canonical vector per need. |
-| job | id, kind (intake, brief), ref_id, state (queued, running, done, failed), attempts, last_error, claimed_at, available_at | The queue (ADR 0007). |
-| ai_run | id, step, model, prompt_version, input_tokens, output_tokens, cost_usd, latency_ms, outcome (ok, refusal, max_tokens, validation_error, provider_error, timeout), request_id or need_id | Written by the gateway for every call (CLAUDE.md rule 5). |
-| event | id, entity_type, entity_id, kind, actor_type (ai, pm, requester, system), actor_id, payload, created_at | Append-only. The metrics are computed from it. |
-| brief (should) | need_id, body, claims (each with a source id, quote and number), unverified_claims, ai_run_ids | Claims that fail verification are flagged, not shown as fact. |
+| account | id, name, segment (enterprise, mid_market, smb), arr, renewal_date, is_prospect, pipeline_value | The seeded "CRM". Prospects have arr 0 and a pipeline value. |
+| requester | id, name, role, account_id | `account_id` is null for Brightboard staff (support, sales, CS, internal). No auth (A3). |
+| need | id, title (problem plus persona), problem, persona, job_to_be_done, product_area, status (open, planned, in_progress, shipped, declined, merged), merged_into_id, created_by (ai, pm, seed), priority_score, demand, urgency, strategic_fit | Status is set by a PM, except `merged`. Merged needs are excluded from list, search, suggestions and retrieval. |
+| request | id, requester_id, account_id (the customer, also when staff submit on its behalf), source (portal, support, sales, cs, internal), title, description, status (pending, processing, processed, needs_review), attempts, last_error, claimed_at, needs_review_reason, the AI fields (redacted_text, problem, persona, job_to_be_done, proposed_solution, product_area, severity_signal, extraction_confidence, extraction_rationale; null until processed), need_id | Saved as pending before any model call. The row is the queue job (ADR 0007). |
+| support | need_id, requester_id (unique together), why_it_matters, severity (nice_to_have, important, blocker), link_status (claimed, confirmed, disputed, rejected), check_attempts, check_started_at, check_error, review_reason | `POST /needs/{id}/support` is idempotent, including under a double click. It creates a **claim** that counts only once confirmed. A merged need returns 409. |
+| aisuggestion | request_id or support_id, need_id, kind (duplicate, related, new_need), label, routing_score, model_confidence, rationale, quotes, state (proposed, applied, accepted, rejected, undone), audit_sample, audit_verdict (correct, false_merge), decided_by, decided_at, ai_run_id | Every routing decision, with its evidence. Only `proposed` suggestions appear in the action tabs. `related` ones are informational. |
+| linkevent | action (link, unlink), actor (auto, pm, requester_claim), actor_id, need_id, request_id or support_id, suggestion_id, routing_score, reason, created_at | Append-only; never updated. One row per link or unlink. |
+| airun | step, model, prompt_version, input_tokens, output_tokens, cost_usd, latency_ms, outcome, error, request_id or need_id | Written by the gateway for every call (rule 5). |
+| stakeholderupdate (should) | need_id, kind (requester_update, cs_note), requester_id or account_id, body, flagged_commitments, status (draft, approved, discarded), approved_by, ai_run_id | Nothing goes out without approval (F7). |
 
-**Request and link transitions.** A request is `linked` when a human (the requester or a PM) chose its need, and `auto_linked` when policy did.
+**Transitions.** `request.status` is the pipeline state. The routing outcome is `need_id` plus the suggestion and the LinkEvents.
 
-| Event | Request status | Link change | Inbox tab |
+| Event | request.status | Outcome rows | Inbox tab |
 |---|---|---|---|
-| Saved | pending (job queued) | A claim creates a requester_claimed link, active | none |
-| Worker claims the job | processing | none | none |
-| Routed: auto-link | auto_linked | ai_auto, active; audit flag set | Auto-linked (read-only), plus Audit sample if sampled |
-| Routed: gray zone | suggested | ai_suggested, proposed | Suggestions |
-| Routed: new need | new_need | ai_new_need, active, to a new need (created_by ai); candidates labelled same_need or related → ai_related, related | none |
-| Claim confirmed | linked | Claim stays active | none |
-| Claim disputed | suggested | Claim becomes disputed (excluded from demand); the model's alternative, if any, is proposed | Disputed claims |
-| AI failure (terminal) | needs_review (reason) | An active claim becomes disputed | Needs review |
-| PM accepts a suggestion or a disputed claim | linked | That link becomes active; other proposed links become rejected | none |
-| PM rejects | new_need, or linked if the PM links elsewhere | rejected; a new need or a pm_manual link is created | none |
-| PM undoes an auto-link | suggested | undone; the next-best candidates are proposed | Suggestions |
-| Audit verdict false_merge | suggested | audit_verdict set, link undone; the next-best candidates are proposed | Suggestions |
-| PM links manually (any tab) | linked | pm_manual, active | none |
-| PM relinks the last active request of an AI-created need, or merges two needs | linked | Old links undone, new links active | none; the emptied need becomes `merged` with merged_into_id |
+| Submitted | pending | none | none |
+| Requester supports a need ("this is my need") | (no request) | support `claimed`; LinkEvent link by requester_claim | none |
+| Worker claims the row | processing (attempts+1, claimed_at) | none | none |
+| Routed: auto-link | processed | need_id set; suggestion `applied` (audit flag); LinkEvent link by auto, with the score | Auto-linked (read-only), plus Audit sample if sampled |
+| Routed: gray zone | processed | suggestion `proposed`; need_id stays null | Suggestions |
+| Routed: new need | processed | a new need (created_by ai); need_id set; suggestion `new_need` `applied`; LinkEvent link by auto; candidates labelled same_need or related → `related` suggestions | none |
+| Claim checked: confirmed | (support) | support `confirmed`; suggestion `applied` | none |
+| Claim checked: disputed | (support) | support `disputed` (still not counted); suggestion `proposed`, with the model's alternative if any | Disputed claims |
+| AI failure (terminal) | needs_review (reason) | none | Needs review |
+| Claim check fails (terminal) | (support) | support `disputed` with review_reason | Disputed claims |
+| PM accepts | processed | need_id set; suggestion `accepted`; LinkEvent link by pm. For a claim: support `confirmed`. | none |
+| PM rejects | processed | suggestion `rejected`; the PM links elsewhere or creates a new need (LinkEvent by pm). For a claim: support `rejected`. | none |
+| PM undoes an auto-link | processed | LinkEvent unlink by pm (reason undo); need_id null; suggestion `undone`; next-best candidates `proposed` | Suggestions |
+| Audit verdict false_merge | processed | audit_verdict set; then as for an undo (reason "audit: false_merge") | Suggestions |
+| PM relinks the last request of an AI-created need, or merges two needs | processed | unlink + link LinkEvents; the emptied need becomes `merged` with merged_into_id | none |
 
-**Audit sample** (F3). An auto-link is sampled when `sha256(request_id) mod 10 == 0`. The hash makes the sample about 10%, reproducible and testable. The PM gives each sampled link a verdict of `correct` or `false_merge`.
+**Audit sample** (F3). An auto-link is sampled when `sha256(request_id) mod 10 == 0`: about 10%, reproducible and testable. The PM marks each sampled link correct or false_merge.
 
 ## 6. AI pipeline
 
 | # | Step | Technique | Model | Deterministic | On failure |
 |---|---|---|---|---|---|
-| 1 | Redact | Regex for emails and phone numbers, applied at save (`redacted_text`) and again inside the gateway on every input of every call (brief, agent tool results, F7 drafts, candidate texts) | none | yes | not applicable |
-| 2 | Embed | Local fastembed `bge-small` behind an `Embedder` interface | none (local) | yes | Retry the job; after N failures, needs_review |
+| 1 | Redact | Regex for emails and phone numbers. Stored as `redacted_text` before embedding, and applied again inside the gateway on every input of every call (brief, agent tool results, F7 drafts, candidate texts) | none | yes | not applicable |
+| 2 | Embed | Local fastembed `bge-small` behind an `Embedder` interface | none (local) | yes | Retry the row; after N failures, needs_review |
 | 3 | Retrieve | numpy cosine over request and canonical vectors; per need, take the best match; return the top 5 needs, plus the claimed need if there is one and it isn't already among them | none | yes | An empty backlog goes straight to new_need |
 | 4 | Extract | Structured output (`messages.parse` with a Pydantic schema); text inside XML tags | Chosen by eval (ADR 0006); offline: heuristics | no | Provider error or timeout (transient): the job is retried with backoff, up to N=3 attempts, then needs_review. Inside the gateway: max_tokens gets one retry with a higher limit, and a validation error gets one retry. A second failure of either, or any refusal, is terminal: needs_review immediately, with the reason. |
 | 5 | Adjudicate | Structured output: for each candidate, a label (same_need, related, different), a confidence, a rationale and quotes | Chosen by eval; offline: similarity thresholds (the baseline) | no | Same as step 4. A quote that isn't found verbatim in the request is dropped and flagged. |
@@ -136,21 +134,21 @@ Model calls happen first. All results are then written in one transaction, so a 
 - Starting values: w_L 0.5, w_s 0.3, w_f 0.2. s_min and s_max are calibrated on the dev split.
 
 **Policy**, on the best candidate *n\**:
-- `score ≥ T_auto` (start high: 0.90): auto_linked.
+- `score ≥ T_auto` (start high: 0.90): auto-link (need_id set, suggestion `applied`).
 - `T_suggest ≤ score < T_auto` (start: 0.60): suggested.
-- Otherwise new_need. Candidates labelled same_need or related are still shown on the request as "possibly related" (links in state `related`). That is a suggestion only: it isn't in the inbox and doesn't count as demand.
+- Otherwise new_need. Candidates labelled same_need or related are still shown on the request as "possibly related" (`related` suggestions). That is a suggestion only: it isn't in the inbox and doesn't count as demand.
 
-A **claim** on need *m* (always among the candidates, see §6 step 3) is confirmed if `L_m = same_need` and `score_m ≥ T_suggest`. Otherwise it is disputed, and the inbox shows the model's alternative if there is one. The thresholds are chosen on the dev split (see test-plan.md).
+A **claim** (a support in `claimed` state) on need *m* is checked by the same workflow. It uses the support's why_it_matters as the text, and *m* is always among the candidates (§6 step 3). It is confirmed if `L_m = same_need` and `score_m ≥ T_suggest`. Otherwise it is disputed, and the inbox shows the model's alternative if there is one. The thresholds are chosen on the dev split (see test-plan.md).
 
 The **baseline** uses the same policy code, with *L_n* replaced by `s_n ≥ s_dup`. That makes the comparison like for like.
 
-**Prioritization**, per need. Only active links and supports count, and each account is counted once.
+**Prioritization**, per need. Only member requests (need_id set) and confirmed supports count, and each account is counted once.
 - **Demand** `D = min(1, log10(1 + R/1000) / log10(1 + R_cap/1000))`.
-  - `R = Σ ARR_a` over customer accounts, plus `Σ p_win · pipeline_a` over prospects.
+  - `R = Σ ARR_a` over customer accounts, plus `Σ p_win · pipeline_a` over prospects (`is_prospect`).
   - Starting values: `p_win` 0.2; `R_cap` $5M.
   - The log keeps one large account from dominating.
 - **Urgency** `U = 0.6 · max severity weight + 0.4 · renewal share`.
-  - Severity weights: blocker 1.0, workaround 0.5, nice-to-have 0.2.
+  - Severity weights: blocker 1.0, important 0.5, nice_to_have 0.2.
   - Renewal share: the supporting ARR that renews within 90 days, divided by all supporting ARR.
 - **Strategic fit** (should) `S = Σ_g weight_g · rating_g / 3`, over the goals in config/goals.yaml.
   - Each rating is 0 to 3 and comes with a rationale and a quote verified in code.
@@ -184,12 +182,12 @@ At about 2,000 requests a month, the most expensive config costs about $46. That
 
 ## 10. Success metrics
 
-The baselines are assumptions (marked A), because there is no real "before" data.
+The baselines are assumptions (marked A), because there is no real "before" data. Metrics are computed from `linkevent`, `aisuggestion`, `support` and the request timestamps (the "Definition" column names the rows).
 
-| ID | Metric | Definition (computed from `event`) | Assumed baseline | Level |
+| ID | Metric | Definition | Assumed baseline | Level |
 |---|---|---|---|---|
-| M1 | PM triage effort | Share of processed requests with no PM-actor event, excluding audit verdicts; also reported as PM minutes per 100 requests (× 2 min) | 0% untouched today (A5) | must |
-| M2 | Duplicate rate | Deflection: share of submissions that carry a claimed_need_id (from request-created events). Leakage: requests routed to new_need that a PM later relinks to an existing need | About 30% of incoming requests are duplicates (A7) | must |
+| M1 | PM triage effort | Share of processed requests with no PM LinkEvent or PM suggestion decision, excluding audit verdicts; also reported as PM minutes per 100 requests (× 2 min) | 0% untouched today (A5) | must |
+| M2 | Duplicate rate | Deflection: claims made at the door ÷ (claims + new requests) over the period. Leakage: requests routed to a new need that a PM later relinks to an existing need (LinkEvent unlink and link by pm) | About 30% of incoming requests are duplicates (A7) | must |
 | M3 | Decision-loop latency | Time from a need's status change to every supporter's update being approved | Median 14 days (A8) | should (needs F7) |
 | M4 | False-merge rate (guardrail) | Audited auto-links marked false_merge ÷ audited auto-links, with a Wilson 95% interval; the undo rate on auto-links is reported as a lower bound | Target ≤ 3% (upper bound shown) | must |
 
@@ -202,14 +200,14 @@ Further guardrails shown in F8:
 
 | Risk | Mitigation |
 |---|---|
-| False merges hide demand and mislead updates | High T_auto, a disputed state for claims, a 10% audit (M4), one-click undo, only active links count |
+| False merges hide demand and mislead updates | High T_auto, claims not counted until confirmed, a 10% audit (M4), one-click undo with LinkEvent history |
 | Synthetic data overstates quality | Hard cases written by hand first, a frozen test split, error bars, and the report says the data is synthetic |
 | Prompt injection in request text | Text inside XML tags as data, structured output only, no write tools in intake (rule 3); the worst case is a wrong suggestion a human reviews or undoes |
 | PII sent to the provider | Emails and phones redacted at save and again in the gateway on every call. Names aren't redacted (accepted risk, noted). |
 | Provider outage or refusal | The queue retries with backoff, then needs_review; the app stays usable |
 | Local embeddings miss paraphrases | recall@5 is its own metric; switch to Voyage below 90% (ADR 0002) |
 | "The richest customer wins" | Log-scaled demand; popular and strategic shown separately; the PM decides status |
-| Cost runaway | max_tokens per step, the agent step cap, ai_runs cost in F8 |
+| Cost runaway | max_tokens per step, the agent step cap, ai_runs cost in F8. Not yet covered: a rate limit on `POST /requests` and support. In live mode each pending row becomes paid calls, so a cap on pending rows per requester comes with the worker. |
 | Scope vs the 2-3 h guidance | Must and should levels; the agent is dropped first |
 
 ## 12. Non-goals
@@ -233,4 +231,6 @@ Further guardrails shown in F8:
 - **A7** About 30% of incoming requests duplicate an existing need.
 - **A8** Supporters hear about a decision a median of 14 days after it is made.
 - **A9** An offline demo shows baseline outputs for new submissions, and recorded live outputs for the seed data.
-- **A10** Severity is self-reported by the requester; the extraction's severity signals are shown next to it but don't override it.
+- **A10** Severity (nice_to_have, important, blocker) is self-reported on a support. The extraction's severity signal is shown next to it but doesn't override it.
+- **A11** A request's description is optional (empty allowed) and capped at 5,000 characters; the title is required, 1-200 characters after trimming.
+- **A12** Staff (requesters with no account) must name the customer `account_id` for support, sales and cs requests; internal requests may have none. A customer can only submit for their own account. Supports are always by the requester themselves, so a support's account is the requester's.

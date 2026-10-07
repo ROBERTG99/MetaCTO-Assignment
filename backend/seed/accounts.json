@@ -1,0 +1,110 @@
+[
+ {
+  "ref": "northwind",
+  "name": "Northwind Logistics",
+  "segment": "enterprise",
+  "arr": 420000,
+  "renewal_date": "2026-12-15"
+ },
+ {
+  "ref": "helix",
+  "name": "Helix Health Systems",
+  "segment": "enterprise",
+  "arr": 310000,
+  "renewal_date": "2027-06-30"
+ },
+ {
+  "ref": "meridian",
+  "name": "Meridian Bank",
+  "segment": "enterprise",
+  "arr": 520000,
+  "renewal_date": "2026-11-30"
+ },
+ {
+  "ref": "contoso",
+  "name": "Contoso Retail",
+  "segment": "mid_market",
+  "arr": 85000,
+  "renewal_date": "2027-02-01"
+ },
+ {
+  "ref": "bluepeak",
+  "name": "Bluepeak Software",
+  "segment": "mid_market",
+  "arr": 64000,
+  "renewal_date": "2026-12-01"
+ },
+ {
+  "ref": "orchard",
+  "name": "Orchard Foods Co-op",
+  "segment": "mid_market",
+  "arr": 48000,
+  "renewal_date": "2027-04-15"
+ },
+ {
+  "ref": "atlas",
+  "name": "Atlas Freight",
+  "segment": "mid_market",
+  "arr": 72000,
+  "renewal_date": "2027-08-01"
+ },
+ {
+  "ref": "lumen",
+  "name": "Lumen Marketing Group",
+  "segment": "mid_market",
+  "arr": 39000,
+  "renewal_date": "2026-11-10"
+ },
+ {
+  "ref": "tinybakery",
+  "name": "Tiny Bakery Co",
+  "segment": "smb",
+  "arr": 2400,
+  "renewal_date": "2027-01-20"
+ },
+ {
+  "ref": "pixelforge",
+  "name": "Pixelforge Studio",
+  "segment": "smb",
+  "arr": 3600,
+  "renewal_date": "2026-10-30"
+ },
+ {
+  "ref": "greenway",
+  "name": "Greenway Dental",
+  "segment": "smb",
+  "arr": 4800,
+  "renewal_date": "2027-05-05"
+ },
+ {
+  "ref": "soletrader",
+  "name": "Mensah Analytics",
+  "segment": "smb",
+  "arr": 1200,
+  "renewal_date": "2027-03-03"
+ },
+ {
+  "ref": "vantage",
+  "name": "Vantage Insurance",
+  "segment": "enterprise",
+  "arr": 0,
+  "is_prospect": true,
+  "pipeline_value": 380000
+ },
+ {
+  "ref": "carely",
+  "name": "Carely",
+  "segment": "mid_market",
+  "arr": 0,
+  "is_prospect": true,
+  "pipeline_value": 120000
+ },
+ {
+  "ref": "quanta",
+  "name": "Quanta Payments",
+  "segment": "enterprise",
+  "arr": 0,
+  "is_prospect": true,
+  "pipeline_value": 260000
+ }
+]

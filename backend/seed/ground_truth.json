@@ -1,0 +1,549 @@
+{
+ "version": 1,
+ "note": "Synthetic ground truth for the Brightboard seed (spec A1). Needs are problem plus persona: the same words can mean different needs.",
+ "needs": {
+  "sso": {
+   "title": "IT admins need to sign in through their identity provider (SSO) before rolling Brightboard out",
+   "persona": "it_admin",
+   "product_area": "security_admin"
+  },
+  "scim": {
+   "title": "IT admins need users provisioned and deprovisioned from their identity provider (SCIM)",
+   "persona": "it_admin",
+   "product_area": "security_admin"
+  },
+  "share_kpis": {
+   "title": "Team leads need to get KPIs to people who have no Brightboard login",
+   "persona": "team_lead",
+   "product_area": "sharing"
+  },
+  "excel_finance": {
+   "title": "Finance needs month-end figures in Excel to build the monthly finance pack",
+   "persona": "finance",
+   "product_area": "export"
+  },
+  "data_portability": {
+   "title": "IT admins need a full export of their data for migration, backups and retention",
+   "persona": "it_admin",
+   "product_area": "export"
+  },
+  "csv_import": {
+   "title": "Small teams need to load spreadsheets and CSV files as a data source",
+   "persona": "smb_owner",
+   "product_area": "data_sources"
+  },
+  "permissions": {
+   "title": "Admins need granular permissions so each team sees only its own dashboards and rows",
+   "persona": "it_admin",
+   "product_area": "security_admin"
+  },
+  "audit_log": {
+   "title": "Compliance needs a log of who viewed, changed and exported what",
+   "persona": "security_compliance",
+   "product_area": "security_admin"
+  },
+  "alerts": {
+   "title": "Operations managers need an alert when a metric crosses a threshold",
+   "persona": "ops_manager",
+   "product_area": "alerts"
+  },
+  "mobile": {
+   "title": "People away from a desk need dashboards that work on phones and iPads",
+   "persona": "ops_manager",
+   "product_area": "mobile"
+  },
+  "performance": {
+   "title": "Analysts need large dashboards to load in seconds",
+   "persona": "analyst",
+   "product_area": "performance"
+  },
+  "snowflake": {
+   "title": "Data teams need a native Snowflake connector",
+   "persona": "data_engineer",
+   "product_area": "data_sources"
+  },
+  "onboarding_templates": {
+   "title": "New customers need starter dashboard templates to get value quickly",
+   "persona": "smb_owner",
+   "product_area": "onboarding"
+  },
+  "chart_comments": {
+   "title": "Teams need to discuss and annotate charts in place",
+   "persona": "analyst",
+   "product_area": "collaboration"
+  },
+  "localization": {
+   "title": "Spanish- and Portuguese-speaking teams need the UI in their language",
+   "persona": "ops_manager",
+   "product_area": "localization"
+  },
+  "dark_mode": {
+   "title": "Users want a dark theme",
+   "persona": "end_user",
+   "product_area": "ui"
+  },
+  "embedded": {
+   "title": "Product teams need to embed dashboards in their own customer portal",
+   "persona": "product_manager",
+   "product_area": "embedded"
+  }
+ },
+ "requests": {
+  "R01": {
+   "need": "sso",
+   "persona": "it_admin",
+   "tags": []
+  },
+  "R02": {
+   "need": "sso",
+   "persona": "it_admin",
+   "tags": []
+  },
+  "R03": {
+   "need": "sso",
+   "persona": "smb_owner",
+   "tags": []
+  },
+  "R04": {
+   "need": "sso",
+   "persona": "security_compliance",
+   "tags": []
+  },
+  "R05": {
+   "need": "sso",
+   "persona": "security_compliance",
+   "tags": []
+  },
+  "R06": {
+   "need": "sso",
+   "persona": "it_admin",
+   "tags": []
+  },
+  "R07": {
+   "need": "sso",
+   "persona": "smb_owner",
+   "tags": [
+    "prompt_injection"
+   ]
+  },
+  "R08": {
+   "need": "scim",
+   "persona": "it_admin",
+   "tags": []
+  },
+  "R09": {
+   "need": "scim",
+   "persona": "it_admin",
+   "tags": []
+  },
+  "R10": {
+   "need": "scim",
+   "persona": "security_compliance",
+   "tags": []
+  },
+  "R11": {
+   "need": "share_kpis",
+   "persona": "team_lead",
+   "tags": []
+  },
+  "R12": {
+   "need": "share_kpis",
+   "persona": "account_manager",
+   "tags": []
+  },
+  "R13": {
+   "need": "share_kpis",
+   "persona": "team_lead",
+   "tags": []
+  },
+  "R14": {
+   "need": "share_kpis",
+   "persona": "finance",
+   "tags": []
+  },
+  "R15": {
+   "need": "share_kpis",
+   "persona": "analyst",
+   "tags": []
+  },
+  "R16": {
+   "need": "share_kpis",
+   "persona": "ops_manager",
+   "tags": []
+  },
+  "R17": {
+   "need": "excel_finance",
+   "persona": "finance",
+   "tags": []
+  },
+  "R18": {
+   "need": "excel_finance",
+   "persona": "finance",
+   "tags": []
+  },
+  "R19": {
+   "need": "excel_finance",
+   "persona": "finance",
+   "tags": []
+  },
+  "R20": {
+   "need": "excel_finance",
+   "persona": "finance",
+   "tags": []
+  },
+  "R21": {
+   "need": "data_portability",
+   "persona": "data_engineer",
+   "tags": []
+  },
+  "R22": {
+   "need": "data_portability",
+   "persona": "it_admin",
+   "tags": []
+  },
+  "R23": {
+   "need": "data_portability",
+   "persona": "it_admin",
+   "tags": []
+  },
+  "R24": {
+   "need": "data_portability",
+   "persona": "security_compliance",
+   "tags": []
+  },
+  "R25": {
+   "need": "data_portability",
+   "persona": "security_compliance",
+   "tags": []
+  },
+  "R26": {
+   "need": "csv_import",
+   "persona": "smb_owner",
+   "tags": []
+  },
+  "R27": {
+   "need": "csv_import",
+   "persona": "ops_manager",
+   "tags": []
+  },
+  "R28": {
+   "need": "csv_import",
+   "persona": "smb_owner",
+   "tags": []
+  },
+  "R29": {
+   "need": "permissions",
+   "persona": "analyst",
+   "tags": []
+  },
+  "R30": {
+   "need": "permissions",
+   "persona": "data_engineer",
+   "tags": []
+  },
+  "R31": {
+   "need": "permissions",
+   "persona": "it_admin",
+   "tags": []
+  },
+  "R32": {
+   "need": "audit_log",
+   "persona": "security_compliance",
+   "tags": []
+  },
+  "R33": {
+   "need": "audit_log",
+   "persona": "security_compliance",
+   "tags": []
+  },
+  "R34": {
+   "need": "audit_log",
+   "persona": "analyst",
+   "tags": []
+  },
+  "R35": {
+   "need": "alerts",
+   "persona": "ops_manager",
+   "tags": []
+  },
+  "R36": {
+   "need": "alerts",
+   "persona": "ops_manager",
+   "tags": [
+    "pii"
+   ]
+  },
+  "R37": {
+   "need": "alerts",
+   "persona": "team_lead",
+   "tags": []
+  },
+  "R38": {
+   "need": "mobile",
+   "persona": "account_manager",
+   "tags": []
+  },
+  "R39": {
+   "need": "mobile",
+   "persona": "ops_manager",
+   "tags": []
+  },
+  "R40": {
+   "need": "mobile",
+   "persona": "smb_owner",
+   "tags": []
+  },
+  "R41": {
+   "need": "performance",
+   "persona": "analyst",
+   "tags": []
+  },
+  "R42": {
+   "need": "performance",
+   "persona": "analyst",
+   "tags": []
+  },
+  "R43": {
+   "need": "performance",
+   "persona": "data_engineer",
+   "tags": []
+  },
+  "R44": {
+   "need": "performance",
+   "persona": "exec",
+   "tags": []
+  },
+  "R45": {
+   "need": "snowflake",
+   "persona": "data_engineer",
+   "tags": []
+  },
+  "R46": {
+   "need": "snowflake",
+   "persona": "analyst",
+   "tags": []
+  },
+  "R47": {
+   "need": "snowflake",
+   "persona": "product_manager",
+   "tags": []
+  },
+  "R48": {
+   "need": "onboarding_templates",
+   "persona": "smb_owner",
+   "tags": []
+  },
+  "R49": {
+   "need": "onboarding_templates",
+   "persona": "smb_owner",
+   "tags": []
+  },
+  "R50": {
+   "need": "chart_comments",
+   "persona": "finance",
+   "tags": []
+  },
+  "R51": {
+   "need": "chart_comments",
+   "persona": "account_manager",
+   "tags": []
+  },
+  "R52": {
+   "need": "localization",
+   "persona": "ops_manager",
+   "tags": []
+  },
+  "R53": {
+   "need": "localization",
+   "persona": "ops_manager",
+   "tags": [
+    "non_english"
+   ]
+  },
+  "R54": {
+   "need": "localization",
+   "persona": "team_lead",
+   "tags": []
+  },
+  "R55": {
+   "need": "dark_mode",
+   "persona": "smb_owner",
+   "tags": []
+  },
+  "R56": {
+   "need": "dark_mode",
+   "persona": "end_user",
+   "tags": []
+  },
+  "R57": {
+   "need": "dark_mode",
+   "persona": "smb_owner",
+   "tags": []
+  },
+  "R58": {
+   "need": "dark_mode",
+   "persona": "end_user",
+   "tags": []
+  },
+  "R59": {
+   "need": "embedded",
+   "persona": "product_manager",
+   "tags": []
+  },
+  "R60": {
+   "need": "embedded",
+   "persona": "product_manager",
+   "tags": []
+  },
+  "R61": {
+   "need": "embedded",
+   "persona": "cs_leader",
+   "tags": []
+  },
+  "R62": {
+   "need": null,
+   "persona": "ops_manager",
+   "tags": [
+    "noise"
+   ]
+  }
+ },
+ "related": [
+  {
+   "needs": [
+    "sso",
+    "scim"
+   ],
+   "why": "Both are identity-provider integration; SCIM is provisioning, not sign-in."
+  },
+  {
+   "needs": [
+    "sso",
+    "audit_log"
+   ],
+   "why": "Both come from the same enterprise security reviews."
+  },
+  {
+   "needs": [
+    "permissions",
+    "audit_log"
+   ],
+   "why": "Both are access governance."
+  },
+  {
+   "needs": [
+    "csv_import",
+    "snowflake"
+   ],
+   "why": "Both are new data sources."
+  },
+  {
+   "needs": [
+    "share_kpis",
+    "embedded"
+   ],
+   "why": "Both put dashboards in front of people outside Brightboard."
+  },
+  {
+   "needs": [
+    "permissions",
+    "embedded"
+   ],
+   "why": "Embedding needs per-tenant data isolation."
+  }
+ ],
+ "hard_negatives": [
+  {
+   "needs": [
+    "excel_finance",
+    "data_portability"
+   ],
+   "why": "Same words ('Excel export'), different persona and problem: a finance pack vs leaving or backing up."
+  },
+  {
+   "needs": [
+    "data_portability",
+    "csv_import"
+   ],
+   "why": "Export vs import of CSV files."
+  },
+  {
+   "needs": [
+    "excel_finance",
+    "csv_import"
+   ],
+   "why": "Excel on both sides, opposite directions."
+  },
+  {
+   "needs": [
+    "share_kpis",
+    "alerts"
+   ],
+   "why": "Both can post to Slack: a scheduled digest vs an alert on a threshold."
+  }
+ ],
+ "arrival_order": [
+  "R01",
+  "R55",
+  "R11",
+  "R45",
+  "R26",
+  "R02",
+  "R38",
+  "R17",
+  "R41",
+  "R21",
+  "R08",
+  "R35",
+  "R12",
+  "R03",
+  "R29",
+  "R52",
+  "R32",
+  "R13",
+  "R50",
+  "R27",
+  "R18",
+  "R48",
+  "R14",
+  "R42",
+  "R56",
+  "R22",
+  "R36",
+  "R04",
+  "R33",
+  "R46",
+  "R30",
+  "R59",
+  "R09",
+  "R39",
+  "R19",
+  "R53",
+  "R05",
+  "R57",
+  "R23",
+  "R43",
+  "R60",
+  "R15",
+  "R40",
+  "R10",
+  "R47",
+  "R24",
+  "R28",
+  "R20",
+  "R51",
+  "R34",
+  "R06",
+  "R54",
+  "R37",
+  "R31",
+  "R61",
+  "R49",
+  "R07",
+  "R58",
+  "R44",
+  "R16",
+  "R62",
+  "R25"
+ ]
+}

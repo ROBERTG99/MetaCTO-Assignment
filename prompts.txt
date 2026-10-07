@@ -282,3 +282,44 @@ SUMMARY:
 - Placed config/ at the repo root so llm-code.md's config/** path matches.
 - Reviewer (opus) on the docs: no blockers, 12 should-fix and 9 nits. All fixed: gateway-level redaction; claimed need always adjudicated; T_suggest rule inverted; cascade gate defined on the routing score, so stated confidence never routes; request/link transition table; merged needs; related-link state; read-only Auto-linked tab; M2 from claimed_need_id; terminal retry rules; API test modules. Spot-checked with grep, no second reviewer run.
 - Flagged: spec is ~3.8K words, longer than the ~3 pages asked. Docs-only: make check skipped.
+
+---
+[#9] 2026-10-07T15:07:12Z
+PROMPT:
+Let's build the backend foundation. The brief's core requirements live here: submitting a request, finding existing ones, adding support and seeing how requests are grouped. So I want the API contract pinned down by tests before the implementation.
+
+1. Scaffold backend/ with uv, Python 3.12, FastAPI, SQLModel on SQLite in WAL mode, pydantic-settings, ruff and mypy. Makefile targets: setup, dev-api, test, lint, typecheck, check, seed and openapi. check also runs check-hooks, which runs the hook tests with backend/.venv/bin on PATH and HOOK_TESTS_REQUIRE_RUFF=1. openapi writes openapi.json without starting the server.
+2. Test first: write API contract tests for the behaviors below, run them, and show me they fail for the right reason. Then implement until they pass.
+   - POST /requests saves the request and returns 201 with status pending, without waiting for any AI work.
+   - A missing or empty title, a description over 5,000 characters or an unknown source returns 422 in our error shape, with a code and a message.
+   - GET /needs supports text search, filters by status, product area and segment, sorting by priority, support or recency, and pagination.
+   - GET /needs/{id} returns the need with its supporting requests and accounts. An unknown id returns 404.
+   - POST /needs/{id}/support is idempotent per requester and need. It stores why it matters and a severity: nice_to_have, important or blocker. It creates a requester-claimed link that the intake workflow will check later, so it never counts as a confirmed merge on its own.
+3. Tables: Account with segment enterprise, mid_market or smb, plus arr, renewal_date, is_prospect and pipeline_value. Requester. Request with source portal, support, sales, cs or internal; status pending, processing, processed or needs_review; attempts, last_error and claimed_at for the queue; nullable AI fields; and need_id. Need. Support, with whether the link was claimed by the requester or confirmed. AISuggestion, with a flag for the audit sample. AIRun. StakeholderUpdate.
+4. Seed data in backend/seed/, written the way real customers write. 12 accounts, 3 enterprise, 5 mid-market and 4 SMB, and 3 prospects with pipeline value. About 60 requests from every source, forming about 15 needs:
+   - SSO: Okta, Azure AD, Google login, "IT won't roll out without SSO".
+   - SCIM provisioning, related to SSO but not a duplicate.
+   - Sharing KPIs with people who have no account: scheduled email reports, a weekly PDF, a Slack digest.
+   - Excel export that means two different needs: "Excel export for the monthly finance pack" from finance, and "Excel/CSV export so we can migrate" from an IT admin, next to bulk API export and backups.
+   - CSV import, a hard negative for export.
+   - Granular permissions, audit log, threshold alerts, mobile and iPad, dashboard performance, a Snowflake connector, onboarding templates, chart comments, a Spanish and Portuguese UI.
+   - Dark mode, popular with SMB but low strategic value.
+   - Embedded analytics for customer portals, backed by prospect pipeline.
+   - Plus one prompt-injection attempt, one request with an email and a phone number, one written in Spanish and one vague "make it better".
+   Write the truth to backend/seed/ground_truth.json: which need each request belongs to, which needs are related, and the arrival order. Label the persona too, since the same words can mean different needs.
+5. Test the seed itself: every request is labelled, every cluster except the noise has at least two members, every account referenced exists, and the Excel split has members on both sides.
+
+Deliverables: backend/ with the app, tests and seed, the Makefile and openapi.json.
+Done when: make check is green, make seed loads the raw data, you've shown me the red run with test names and failures and then the green run, and you've printed 8 random seed requests so I can check they sound real. Commit "feat(api): domain model, API contract and seed data" and push.
+
+Follow-up sent mid-turn:
+Agreed on all three, and update the spec and ADRs to match in this same commit. One addition: since need_id replaces the link table, keep the link history somewhere. Each link or unlink needs to record who or what made it, auto, PM or requester claim, plus when and the routing score. Undo, the audit sample and the AI audit trail depend on that. Keep it small, a LinkEvent table or columns on AISuggestion, your call, and say which you picked.
+SUMMARY:
+- Scaffolded backend/ (uv, Python 3.12, FastAPI, SQLModel on SQLite WAL, pydantic-settings, ruff, mypy strict). Makefile: setup, dev-api, test, lint, typecheck, check, check-hooks (backend/.venv/bin on PATH, HOOK_TESTS_REQUIRE_RUFF=1), seed, openapi.
+- Tests first: 31 API contract tests red (all 404 "Not Found" or missing keys), then green. Seed: 10 tests (the 2 loader tests went red first; the 8 data checks passed on first run, since the data was written first).
+- Tables as asked, plus LinkEvent (append-only link/unlink history: actor auto|pm|requester_claim, time, routing score); chose a table over AISuggestion columns because PM manual links and requester claims have no suggestion.
+- Seed: 15 accounts (3/5/4 + 3 prospects), 28 requesters, 62 requests, 17 needs, ground_truth.json with persona labels, related pairs and hard negatives. make seed loads raw data only (62 pending, 0 needs).
+- Reviewer (opus): fix first, no blockers. Fixed test-first (17 red, then green): race on double-click support (IntegrityError -> 200), catch-all 500 in our error shape, ids bounded to 64-bit, 405 keeps Allow, staff submit on behalf of an account (account_required/mismatch/unknown), 409 on merged needs, repeat support keeps why. Claim-check failure -> disputed with review_reason (new Support columns). Not fixed: CLAUDE.md rule 2 still says "status auto_linked" (user's file; flagged).
+- Spec §5 and transitions, ADR 0004 and 0007 (request row is the job; backoff from claimed_at), architecture, test plan and requirements updated to the built model.
+- Dependencies: fastapi, uvicorn, sqlmodel, pydantic, pydantic-settings (runtime); pytest, httpx2 (TestClient transport; Starlette deprecates httpx), ruff, mypy (dev).
+- make check: 64 pytest + 29 hook tests, 0 skipped. Commit "feat(api): domain model, API contract and seed data".
