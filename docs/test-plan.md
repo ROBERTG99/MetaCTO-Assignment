@@ -32,8 +32,13 @@ No test calls a real model (CLAUDE.md rule 8). Unit and API tests inject FakeLLM
 | Gateway: one ai_run per call with every field; redaction of every input; refusal is terminal; max_tokens and validation errors retried once, then terminal | `unit/test_gateway.py` |
 | Overlap agent (should): step cap enforced; only read-only tools exposed; findings verified | `unit/test_agent.py` |
 | Metric computations M1-M4, acceptance rate, Wilson interval | `unit/test_metrics.py` |
-| Eval metric functions: precision, coverage, recall@5 | `unit/test_eval_metrics.py` |
-| Frozen test split: hash unchanged | `unit/test_eval_freeze.py` |
+| Frozen test split: hash, uncommitted changes, same-commit rule (passing) | `evals/tests/test_dataset.py` |
+| Eval metrics with hand-computed values (passing) | `evals/tests/test_metrics.py` |
+| Threshold choice on dev (passing) | `evals/tests/test_tune.py` |
+| Retrieval: best match per need, canonical vector, top k (passing) | `unit/test_retrieval.py` |
+| Baseline bands and threshold loading (passing) | `unit/test_baseline.py` |
+| Embedders: fake determinism, real model offline (passing) | `unit/test_embeddings.py` |
+| Runner logic: dev labels, noise, raw tuning mode, each test case counted once (passing) | `evals/tests/test_run.py` |
 | Seed data: every request labelled, clusters of two or more, references exist, the Excel split on both sides, the loader loads raw data only (passing) | `unit/test_seed_data.py` |
 | SQLite in WAL mode with foreign keys (passing) | `unit/test_db.py` |
 
@@ -60,21 +65,27 @@ No test calls a real model (CLAUDE.md rule 8). Unit and API tests inject FakeLLM
    - same_need: the same problem for the same persona or job, whatever the solution.
    - related: an overlapping area, but a different problem or persona.
    - different: no overlap.
-3. Split and **freeze the test set before any prompt exists.** `evals/datasets/test.jsonl` has its SHA-256 in `test.sha256`, and `test_eval_freeze.py` fails if it changes. Changing it requires a separate commit that gives a reason.
+3. **Freeze the test set before any prompt or threshold exists** (done in commit `3ce8b0d`). `evals/datasets/FROZEN` holds the SHA-256 of `test.jsonl`. The runner refuses to run if the hash differs, if either file has uncommitted changes, or if the last commit that touched `test.jsonl` didn't also touch `FROZEN` (`evals/dataset.py`, tested in `evals/tests/test_dataset.py`).
 
-**Dataset:** about **150 labelled pairs**. Each pair is a new request plus the backlog state, with the gold need or NEW, plus gold persona and product area.
+**Splits** (as built; evals/REPORT.md §1):
 
-| Slice | Share | Purpose |
+| Split | What | Size |
 |---|---|---|
-| Hard: same solution, different need | 30 (15 dev / 15 test) | Catches false merges; the thesis lives here |
-| Hard: different solution, same need | 30 (15 / 15) | Paraphrase recall (retrieval and adjudication) |
-| Clear duplicates | 44 (22 / 22) | Coverage of auto-linking |
-| Genuinely new | 46 (23 / 23) | New-need accuracy, no forced links |
+| dev | The seed stream (`backend/seed/`) replayed in arrival order. Each request is routed against the backlog so far; right = the right existing need, or "new" when its cluster first appears. The backlog then takes the true label, so errors don't compound. All tuning happens here. | 62 decisions (44 repeats, 18 first appearances) |
+| test | `evals/datasets/test.jsonl`: one request per case, routed against the full seeded backlog (17 needs, their requests, one canonical text per need). Run only to report results; never used for tuning. | 150 cases |
 
-**Split:** dev 75 and test 75, stratified by slice.
-- Thresholds, weights, s_min/s_max and prompts are tuned on dev only.
-- The test split is run only to report results. It is never used for tuning.
-- The test split is hand-written or hand-reviewed. LLM-generated paraphrases are allowed only in dev, and each one is reviewed.
+Test-set composition. Robert's 17 handwritten cases (`H…`, `reviewed_by_human: true`) are the pattern; Claude generated the other 133 (`T…`, `reviewed_by_human: false`). The handwritten cases are reported as their own slice.
+
+| Slice | Cases | Purpose |
+|---|---|---|
+| Same solution, different need | 25 | Catches false merges; the thesis lives here |
+| Different solution, same need | 25 | Recall across different solutions |
+| Hard negative | 25 | Related but different needs |
+| Paraphrase | 25 | Same need, different words (the retrieval gate) |
+| Clear duplicate | 20 | Coverage of auto-linking |
+| New need | 24 | "New" accuracy, no forced links |
+| Prompt injection | 2 | The injected text must change nothing |
+| Spanish | 4 | Non-English input |
 
 **Metrics, per configuration (C0-C3, and C4 if built):**
 
@@ -90,15 +101,15 @@ No test calls a real model (CLAUDE.md rule 8). Unit and API tests inject FakeLLM
 | Cost and latency | Cost per request; p50 and p95 latency per step, from ai_runs. |
 | Calibration (only to decide C4) | On dev, the precision of Haiku's auto-band decisions (routing score ≥ T_auto) compared with C3's (ADR 0006). |
 
-**Baseline:** C0 runs through the same routing code, with the label replaced by `similarity ≥ s_dup` and extraction done by heuristics. It runs free on every CI build (`make eval-offline`). An LLM step earns its cost only if it beats C0 on the hard slices.
+**Baseline (C0):** routes on the top retrieval similarity alone (`backend/app/ai/baseline.py`), with no extraction and no label, using the same three bands. It is also the app's offline mode. It runs free with `make eval-offline`. An LLM step earns its cost only if it beats C0 on the hard slices and on "new".
 
-**Choosing thresholds (on dev):**
-- **T_auto:** the lowest value that gives auto-link precision ≥ 97% with at least 10 auto-links.
+**Choosing thresholds (on dev, `make eval-tune`, written to `config/routing.yaml`):**
+- **T_auto:** the lowest value that gives auto-link precision ≥ 97% with at least 10 auto-links. If none does, the baseline never auto-links.
 - **T_suggest:** the highest value at which ≥ 95% of the true duplicates that weren't auto-linked still score at or above it, so they land in the gray zone instead of becoming new needs.
-- Both are then confirmed once on test, and reported with Wilson 95% intervals. Starting values in config are 0.90 and 0.60 (spec section 8).
+- Both are confirmed once on test and reported with Wilson 95% intervals. Thresholds are stored unrounded. The baseline's thresholds (0.7666 and 0.6508) didn't transfer: auto false merges were 0/13 on dev but 6/59 on test, all in hard slices that dev lacks (REPORT §1, finding 1). Dev needs hard cases. The test split has been seen, so any later baseline re-tune is labelled post hoc.
 
 **Sample size and error bars:**
-- With 75 test cases, intervals are wide: 70/75 correct gives [85%, 97%]. The test split can only detect large differences.
+- With 150 test cases, intervals are still wide (70/75 on a slice gives [85%, 97%]); per-slice numbers (n = 20-25) can only show large differences.
 - If two configurations' intervals overlap on the deciding metrics, the simpler and cheaper one wins (ADR 0006).
 - The report states that the data is synthetic (assumption A1). The production audit sample (M4) is what narrows the false-merge bound over time.
 

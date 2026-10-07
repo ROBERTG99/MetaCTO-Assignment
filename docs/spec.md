@@ -140,7 +140,7 @@ Model calls happen first. All results are then written in one transaction, so a 
 
 A **claim** (a support in `claimed` state) on need *m* is checked by the same workflow. It uses the support's why_it_matters as the text, and *m* is always among the candidates (§6 step 3). It is confirmed if `L_m = same_need` and `score_m ≥ T_suggest`. Otherwise it is disputed, and the inbox shows the model's alternative if there is one. The thresholds are chosen on the dev split (see test-plan.md).
 
-The **baseline** uses the same policy code, with *L_n* replaced by `s_n ≥ s_dup`. That makes the comparison like for like.
+The **baseline** (no LLM, and the app's offline mode) has no label and no extracted fields. It routes on the top similarity *s* alone, with its own thresholds tuned on dev (`config/routing.yaml` → `baseline`) and the same three bands. Results: evals/REPORT.md §1.
 
 **Prioritization**, per need. Only member requests (need_id set) and confirmed supports count, and each account is counted once.
 - **Demand** `D = min(1, log10(1 + R/1000) / log10(1 + R_cap/1000))`.

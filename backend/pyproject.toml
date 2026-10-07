@@ -9,6 +9,8 @@ dependencies = [
     "sqlmodel>=0.0.22",
     "pydantic>=2.8",
     "pydantic-settings>=2.4",
+    "fastembed>=0.8.1",
+    "pyyaml>=6.0.3",
 ]
 
 [dependency-groups]
@@ -17,13 +19,15 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.11",
     "httpx2>=2.13.1",
+    "types-pyyaml>=6.0.12.20260906",
 ]
 
 [tool.uv]
 package = false
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "../evals/tests"]
+pythonpath = [".", ".."]
 addopts = "-q"
 
 [tool.ruff]
@@ -41,8 +45,8 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]
 python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
-files = ["app", "seed", "tests"]
+files = ["app", "seed", "tests", "../evals"]
 
 [[tool.mypy.overrides]]
-module = ["tests.*"]
+module = ["tests.*", "evals.tests.*"]
 disallow_untyped_decorators = false

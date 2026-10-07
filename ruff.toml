@@ -1,0 +1,2 @@
+# Lets ruff apply the backend settings to evals/ too (one config, one source of truth)
+extend = "backend/pyproject.toml"

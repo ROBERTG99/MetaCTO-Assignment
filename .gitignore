@@ -38,3 +38,6 @@ Icon?
 
 # Claude Code personal overrides
 .claude/settings.local.json
+
+# Local model cache (make setup)
+backend/.cache/

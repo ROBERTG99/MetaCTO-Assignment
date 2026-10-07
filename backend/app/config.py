@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     ai_mode: Literal["offline", "live"] = "offline"
     fast_model: str = "claude-haiku-4-5"
     smart_model: str = "claude-sonnet-5-5"
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    embedding_cache_dir: str = ".cache/fastembed"  # relative to backend/; filled by make setup
 
 
 @lru_cache

@@ -1,10 +1,10 @@
-.PHONY: setup dev-api test lint typecheck check check-hooks seed openapi
+.PHONY: setup dev-api test lint typecheck check check-hooks seed openapi eval-offline eval-tune eval
 
 BACKEND := cd backend &&
 
 # Install backend dependencies (Python 3.12 via uv)
 setup:
-	$(BACKEND) uv sync
+	$(BACKEND) uv sync && uv run python -m app.ai.embeddings download
 
 # API on :8000 with reload
 dev-api:
@@ -14,7 +14,7 @@ test:
 	$(BACKEND) uv run pytest
 
 lint:
-	$(BACKEND) uv run ruff check . && uv run ruff format --check .
+	$(BACKEND) uv run ruff check . ../evals && uv run ruff format --check . ../evals
 
 typecheck:
 	$(BACKEND) uv run mypy
@@ -33,3 +33,19 @@ seed:
 # Write backend/openapi.json without starting the server
 openapi:
 	$(BACKEND) uv run python -m app.openapi
+
+# Evals. Offline runs are free: no model calls.
+SPLIT ?= dev
+STRATEGY ?= baseline
+EVAL := cd backend && PYTHONPATH=.. HF_HUB_OFFLINE=1 uv run python -m evals.run
+
+eval-offline:
+	$(EVAL) --split $(SPLIT) --strategy $(STRATEGY)
+
+# Choose baseline thresholds on dev only and write config/routing.yaml
+eval-tune:
+	$(EVAL) --split dev --tune
+
+# Paid LLM strategies: not built yet
+eval:
+	@echo "make eval runs the paid LLM strategies, which don't exist yet. Use make eval-offline." && exit 1

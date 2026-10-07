@@ -66,7 +66,7 @@ Each answer is written down first, so the Loom can summarize it and point to the
 
 | ID | Requirement | How we satisfy it | How we prove it | Status |
 |---|---|---|---|---|
-| D1 | Model and threshold choices made from evals, against a no-LLM baseline. | About 150 labelled pairs, hand-written hard cases first, a frozen test split, thresholds tuned on dev only (test-plan §3). C0 runs through the same routing code. | evals/REPORT.md; `unit/test_eval_freeze.py`; `make eval-offline` in CI. | todo |
+| D1 | Model and threshold choices made from evals, against a no-LLM baseline. | 150 frozen test cases (17 handwritten), dev = seed replay, thresholds tuned on dev only (test-plan §3). The baseline (C0) is in place: REPORT §1. The LLM configurations C1-C3 are still to come. | evals/REPORT.md; `evals/tests/test_dataset.py` (freeze); `make eval-offline` (CI planned under D6). | todo |
 | D2 | A model cascade (cheap model first, stronger model only for ambiguous cases) if the evals justify it. | Built only if Haiku's auto-band decisions (routing score ≥ T_auto) are as precise as C3's and the cascade beats C3, Sonnet 5.5 at low effort (ADR 0006). The gray band of the routing score triggers escalation. | evals/REPORT.md calibration table and C4 vs C3 comparison; ADR 0006. | todo |
 | D3 | Decision briefs whose quotes and numbers are verified in code. | The F6 brief workflow, with a verifier in code; the agent's findings are verified too (should). | `unit/test_verify.py`; brief eval slice with fabricated quotes and numbers. | todo |
 | D4 | The success metrics instrumented in the product, not just described. | An append-only event log plus a metrics view (F8; spec §10). | `unit/test_metrics.py`; `api/test_metrics_api.py`; e2e GP5, GP6. | todo |

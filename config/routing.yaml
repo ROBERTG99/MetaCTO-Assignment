@@ -1,0 +1,10 @@
+baseline:
+  auto: 0.7665919065475464
+  suggest: 0.6508365869522095
+  tuned_on: dev (seed replay)
+  n: 62
+  embedding_model: BAAI/bge-small-en-v1.5
+  rule: 'auto: lowest similarity with >=97% precision on >=10 links (1.001 = never);
+    suggest: highest that keeps 95% of the remaining true duplicates. Stored unrounded.'
+  tuned_at: '2026-10-07T15:38:37Z'
+  git: 3ce8b0d-dirty

@@ -323,3 +323,43 @@ SUMMARY:
 - Spec §5 and transitions, ADR 0004 and 0007 (request row is the job; backoff from claimed_at), architecture, test plan and requirements updated to the built model.
 - Dependencies: fastapi, uvicorn, sqlmodel, pydantic, pydantic-settings (runtime); pytest, httpx2 (TestClient transport; Starlette deprecates httpx), ruff, mypy (dev).
 - make check: 64 pytest + 29 hook tests, 0 skipped. Commit "feat(api): domain model, API contract and seed data".
+
+---
+[#10] 2026-10-07T15:11:15Z
+PROMPT:
+The brief says they care most about how thoughtfully AI is incorporated, so I want to prove each AI step earns its place. That means the evals and a baseline exist before any prompt does, and the test set is frozen before anyone tunes anything.
+
+1. Datasets.
+   - Create evals/datasets/test_handwritten.jsonl with the schema and stop so I can paste my hard cases in. Then continue.
+   - Dev: replay the seed stream in arrival order and score each decision against ground_truth.json. A decision is right if it links to the right existing need, or creates a new one when its cluster first appears.
+   - Test: evals/datasets/test.jsonl with about 150 labelled pairs against the seeded needs, weighted toward the hard cases: the same solution for a different need, different solutions for the same need, hard negatives, paraphrases, 2 prompt injections and a few in Spanish. Use my handwritten cases as the pattern for the hard ones, and mark every generated case reviewed_by_human false.
+   - Freeze the test set: write its SHA-256 to evals/datasets/FROZEN, and make the runner refuse to run if the file changed without the hash being updated in the same commit.
+2. Metrics, test-first. Write unit tests with hand-computed expected values, show them failing, then implement: decision accuracy, duplicate precision, recall and F1, false-merge rate, meaning linked to the wrong need or linked when it should be new, retrieval recall@k, accuracy per routing-score bucket, Wilson 95% intervals, and latency p50 and p95.
+3. Retrieval: implement the Embedder interface with fastembed and bge-small, plus a fake for tests. make setup downloads the model so offline mode works. Index the individual requests and aggregate per need by best match, plus one canonical-text vector per need. Report recall@1, 3 and 5 on dev and test, with the paraphrase cases as their own slice. If recall@5 on paraphrases is below 90%, tell me before going further.
+4. The baseline strategy, with no LLM at all: embeddings plus similarity thresholds for auto-link, suggest and new, tuned on dev. This also becomes the app's offline mode, so the product degrades to something useful without an API key.
+5. evals/run.py behind make eval-offline SPLIT=dev|test STRATEGY=baseline, which is free, and make eval, which is paid and comes later. Write the first section of evals/REPORT.md: date, git sha, dataset sizes, a note that the data is synthetic, retrieval recall, and the baseline metrics with n and intervals, with my handwritten cases as their own slice.
+
+Deliverables: evals/ with datasets, metrics and their tests, and the runner, plus app/ai/embeddings.py and REPORT.md section 1.
+Done when: the metric tests went red then green, make eval-offline runs on both splits, the test set is frozen, and REPORT.md shows retrieval recall and the baseline numbers the LLM strategies must beat. Commit "feat(evals): hard cases, frozen test set and no-LLM baseline" and push.
+
+Sent after interrupting a push retry:
+GitHub is returning Internal Server Error on push. Keep committing after each prompt as usual, but skip the push until I tell you it works again. Don't retry it yourself.
+SUMMARY:
+- Paused at step 1 as asked: created evals/datasets/test_handwritten.jsonl (empty), case.schema.json (JSON Schema for a case: id, slice, backlog seed_v1, request, expected need/persona/must_not_link, rationale, author, reviewed_by_human) and datasets/README.md (need ids, personas, an example line). Waiting for Robert's hard cases.
+- Tried one push retry of 18fabea before reading the note; Robert rejected it. From now on: commit after each prompt, no push until he says GitHub works. main is 1 commit ahead of origin.
+- Nothing committed yet: this prompt continues once the cases are pasted.
+
+---
+[#11] 2026-10-07T15:40:48Z
+PROMPT:
+@"/Users/robert/Downloads/test_handwritten.jsonl"
+(Robert's 17 hard cases; continues prompt #10.)
+SUMMARY:
+- Validated the 17 cases against case.schema.json (no problems) and copied them to evals/datasets/test_handwritten.jsonl.
+- Generated 133 cases following that pattern (reviewed_by_human false): 25 each of same-solution/different-need, different-solution/same-need, hard negative, paraphrase; 20 clear duplicates; 24 new; 2 injections; 4 Spanish. Froze test.jsonl (SHA-256 8c52554c...) in its own commit 3ce8b0d before any tuning; the runner refuses on a hash mismatch, uncommitted changes, or a FROZEN not updated in the same commit.
+- Test-first: 11 metric tests red (NotImplementedError), then green; also freeze, retrieval, baseline and tuning tests red then green.
+- Added backend/app/ai/embeddings.py (fastembed bge-small with local_files_only, plus FakeEmbedder), retrieval.py (each request indexed, a need scores its best match, plus a canonical vector) and baseline.py (similarity bands, also the offline mode). make setup downloads the 64 MB model. Dependencies: fastembed and pyyaml (runtime), types-pyyaml (dev).
+- evals/run.py with make eval-offline SPLIT=dev|test, make eval-tune (dev only) and a make eval stub. Thresholds tuned on dev: auto 0.7666, suggest 0.6508.
+- Results: paraphrase recall@5 100% (gate met), recall@1 64%. Test accuracy 107/150; auto false merges 6/59 (10.2%, all in hard slices dev lacks); only 6/25 "new" cases stayed new; 55% go to the PM inbox. Dev accuracy 39/62, auto 0/13 wrong. REPORT.md §1 written.
+- Reviewer (opus): fix first. Fixed: a rounding bug that moved the boundary (thresholds now unrounded; dev went 12 to 13 auto-links; test unchanged); finding 1 reworded after I verified the ablation (the canonical titles aren't the cause); a "test seen" note; runner logic tests; a real no-network test; bucket clamping; an empty-FROZEN refusal; git warnings; cache path relative to backend/.
+- Docs: test-plan §3, spec §8 baseline, requirements D1. make check: 112 pytest + 29 hook tests. Committed; not pushed (GitHub 500, per Robert).
