@@ -88,13 +88,18 @@ def _candidates(
 
 def _candidate(session: Session, need: Need) -> CandidateNeed:
     examples = session.exec(select(Request.title).where(Request.need_id == need.id).limit(2)).all()
+    return _candidate_from(need, list(examples))
+
+
+def _candidate_from(need: Need, examples: list[str]) -> CandidateNeed:
+    """What the adjudicator sees of a need (also used by the evals, which have no database)."""
     return CandidateNeed(
         id=str(need.id),
         title=need.title,
         problem=need.problem or need.title,
         persona=need.persona,
         product_area=need.product_area,
-        examples=list(examples),
+        examples=examples[:2],
     )
 
 

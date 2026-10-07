@@ -1,0 +1,45 @@
+{
+  "run_at": "2026-10-07T17:01:39Z",
+  "git": "0c22cfd-dirty",
+  "frozen_sha256": "8c52554c84979a3491433dad73f9a79a09794492a7cf3e10de1240f885b5d31b",
+  "strategies": [
+    "haiku",
+    "sonnet",
+    "sonnet-low"
+  ],
+  "splits": [
+    "dev",
+    "test"
+  ],
+  "extract_model": "claude-haiku-4-5",
+  "adjudicators": {
+    "haiku": [
+      "claude-haiku-4-5",
+      null
+    ],
+    "sonnet": [
+      "claude-sonnet-5-5",
+      null
+    ],
+    "sonnet-low": [
+      "claude-sonnet-5-5",
+      "low"
+    ]
+  },
+  "prompts": [
+    "extract_need_v1",
+    "adjudicate_v1"
+  ],
+  "served_models": [
+    "claude-haiku-4-5-20251001",
+    "claude-sonnet-5-5"
+  ],
+  "routing": {
+    "auto": 0.9,
+    "suggest": 0.6,
+    "s_min": 0.55,
+    "s_max": 0.85
+  },
+  "outcomes": 636,
+  "failed": 0
+}

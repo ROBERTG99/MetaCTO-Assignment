@@ -27,3 +27,12 @@ Extraction and adjudication may need different models. At about 1-2 cents per re
 - Changing a model or prompt is a config change plus an eval run recorded in evals/REPORT.md, with the prompt version bumped (rule 7).
 - Model-specific rules (structured outputs, effort, stop reasons) live in the provider, not in the pipeline.
 - The eval set has to be large enough to separate configurations: about 150 labelled pairs, weighted toward the hard cases (test-plan.md).
+
+## Outcome (2026-10-07, evals/REPORT.md §3)
+- **Haiku 4.5 for both steps.** On dev it overlaps with Sonnet 5.5 (82.3% vs 74.2%), so the simpler, cheaper strategy wins. Test confirms: 91.3% (86-95) vs 74.7% (67-81).
+- **Sonnet 5.5 with `adjudicate_v1`** has perfect precision but about 70% recall. It does not clearly beat the no-LLM baseline on accuracy.
+- **C3 as defined was not measured.** C3 (Sonnet-low for both steps) ran with Haiku extraction, as Robert asked.
+- **The cascade was rejected.** Haiku's confident decisions are calibrated on dev, but on the band the cascade would escalate Sonnet is the weaker judge, and the cascade loses to Sonnet-low.
+- **Not applied yet.** Config and prompts are unchanged until Robert's go.
+- **Not final.** The comparison holds for prompt v1; a v2 needs a new run.
+

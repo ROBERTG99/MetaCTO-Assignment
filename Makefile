@@ -1,4 +1,4 @@
-.PHONY: setup dev-api test lint typecheck check check-hooks seed seed-live openapi eval-offline eval-tune eval
+.PHONY: setup dev-api test lint typecheck check check-hooks seed seed-live openapi eval-offline eval-tune eval eval-compare
 
 BACKEND := cd backend &&
 
@@ -51,6 +51,11 @@ eval-offline:
 eval-tune:
 	$(EVAL) --split dev --tune
 
-# Paid LLM strategies: not built yet
+# Paid: LLM strategies on dev and test (settings ask first). Replies are cached in evals/results/llm_cache.jsonl
+STRATEGIES ?= haiku,sonnet,sonnet-low
 eval:
-	@echo "make eval runs the paid LLM strategies, which don't exist yet. Use make eval-offline." && exit 1
+	cd backend && EVAL_ALLOW_PAID=1 PYTHONPATH=.. HF_HUB_OFFLINE=1 uv run python -m evals.llm --strategies $(STRATEGIES)
+
+# Free: rebuild the strategy comparison (evals/results/comparison.md) from cached outcomes
+eval-compare:
+	cd backend && PYTHONPATH=.. HF_HUB_OFFLINE=1 uv run python -m evals.compare

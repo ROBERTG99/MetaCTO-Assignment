@@ -406,3 +406,31 @@ SUMMARY:
 - Ran make seed-live REFS=R22,R13,R07 (approved): 6 live calls, all ok, $0.036. R22 auto-linked correctly (0.95); R13 suggested for the right need (0.896); R07's injection was ignored and nothing auto-linked, but it became a new need instead of SSO (persona over-split).
 - Found and fixed (test-first, 2 red then green) a cost bug: the dated model id claude-haiku-4-5-20251001 missed the price table, so Haiku calls were recorded at $0. The gateway now prices by the configured model and refuses unpriced models.
 - REPORT.md §2: live smoke run (n=3, not an eval). make check: 203 pytest + 29 hook tests. Committed "feat(ai): intake workflow with a database queue and code-computed routing"; not pushed (waiting for Robert to confirm GitHub works).
+
+---
+[#14] 2026-10-07T17:03:51Z
+PROMPT:
+Time to let data choose the models. Run the eval on dev and test for these strategies, all with Haiku 4.5 for extraction:
+- baseline: embeddings and thresholds only, already measured;
+- haiku: Haiku 4.5 for adjudication;
+- sonnet: Sonnet 5.5 for adjudication;
+- sonnet-low: Sonnet 5.5 at low effort for adjudication, as the reference a cascade would have to beat.
+
+run them inmediately
+
+Add a section to REPORT.md with, per strategy and split: accuracy, duplicate precision, recall and F1, false-merge rate, injection robustness, calibration by routing-score bucket, latency p50 and p95, and cost per request, with n and 95% intervals. Show my handwritten cases and the paraphrase slice on their own.
+
+Then check whether a cascade is worth building: are Haiku's high-confidence decisions as accurate as Sonnet's on the same cases, and would a cascade beat sonnet-low? If not, say so and don't build it. If yes, add it as a fifth strategy, run it after my go, and report it the same way.
+
+Then recommend:
+- the strategy, in one paragraph, weighing quality against cost and latency. If the intervals overlap, the simpler strategy wins. If the baseline is close to the LLM strategies, say so plainly. That would be an important finding, not a failure;
+- the auto-link threshold on the routing score: the lowest score where dev precision stays at or above 0.97, confirmed on test;
+- the 5 most informative failures, each with a hypothesis.
+Don't change prompts or config yet.
+
+Done when: REPORT.md has the comparison with intervals and the cascade decision, and your recommendation is grounded in those numbers. Commit "feat(evals): model strategy comparison" and push.
+SUMMARY:
+- Built evals/llm.py (shared Haiku extraction, cached replies, the app's routing code, 8 parallel calls) and evals/compare.py (free; make eval-compare). Ran make eval: 845 calls, $4.97, 0 failures. Results in REPORT §3 with n and Wilson intervals, the handwritten and paraphrase slices, injection, calibration, threshold sweep, cascade.
+- Reviewer (opus): fix first. Blocker: the dev replay leaked labels (example titles from the whole stream; 17 repeats saw their own title). Fixed with per-item snapshots, test-first (red then green). Re-ran dev via make eval: 126 calls, $0.91 (total $5.88). Also fixed: a failure is wrong but never a link; merged reruns; run metadata; an EVAL_ALLOW_PAID guard only make eval sets; cascade decided on dev; honest wording (baseline close to Sonnet; degenerate T sweep; reworded hypotheses). Once I ran python -m evals.llm directly: cache-only, verified 0 new calls.
+- Result: Haiku 4.5 for both steps (dev overlaps Sonnet, so simpler and cheaper wins; test 91.3% vs 74.7%). Only Haiku clearly beats the baseline; Sonnet doesn't on accuracy. Cascade not built (escalated band: Sonnet 72% vs Haiku 96% on dev). T_auto 0.70 (degenerate; test 97.3%, 3 vs 1 unreviewed false merges vs 0.90). 5 failures: persona over-split (dominant), correlated field agreement (T065), role-driven persona (T084), a debatable label (T050).
+- Config and prompts unchanged. requirements D1/D2 and ADR 0006 updated. make check: 208 pytest + 29 hook tests.
