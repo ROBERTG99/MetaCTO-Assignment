@@ -2,6 +2,12 @@
 
 **Distill turns raw feature requests into deduplicated, need-centric, prioritized product decisions, with a PM in the loop.** Each request is read by a fixed AI workflow as it arrives. The workflow extracts the underlying need (a problem for a persona), judges whether that need already exists, and links the request, suggests a link or opens a new need. Code, not the model, makes every routing decision, and every AI value shows its source, confidence and reason. The PM stops reading the stream: they review a small inbox of exceptions plus a 10% audit sample of the AI's own links. Built for the MetaCTO assessment ([brief](docs/assignment.md)). The CI is green ([latest run](https://github.com/ROBERTG99/MetaCTO-Assignment/actions/workflows/ci.yml)).
 
+
+## Video Link
+
+### https://www.loom.com/share/333a41c80d6d48229a18139cf0cb54b6
+
+
 ![The PM triage inbox: an audited auto-link, with the request and the need side by side, the model's label, the routing score and its parts, the rationale and verified quotes](docs/img/triage-inbox.png)
 
 | | |
