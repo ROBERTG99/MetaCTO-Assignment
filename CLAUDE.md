@@ -15,19 +15,20 @@ Distill: an AI-first feature intelligence system. It turns unstructured feature 
   - app/api/: thin HTTP routes. app/services/: business logic. app/models.py: tables.
   - app/ai/gateway.py: the only module that calls a model provider.
   - app/ai/prompts/: versioned prompt files (`<step>_v<N>.md`).
-  - app/ai/pipeline.py: intake workflow (redact, embed, retrieve, extract, adjudicate, route, enrich, score).
+  - app/ai/pipeline.py: intake workflow (redact, embed, retrieve, extract, adjudicate, route), then it queues the strategic-fit rating. Demand, urgency and priority are computed on read in app/services/priority.py (ADR 0009).
+  - app/ai/brief.py: decision briefs, with the one bounded agent (related needs; ADR 0012).
   - app/scoring.py: deterministic priority math; weights in config/priorities.yaml.
 - frontend/: React, TypeScript (strict), Vite, Tailwind, TanStack Query; API types generated from OpenAPI; Playwright specs in e2e/.
 - evals/: datasets, runner, REPORT.md.
 - Path-scoped rules in .claude/rules/ load when you work on AI code, tests or the frontend.
 
 -----Commands
-- `make setup` · `make dev` (API :8000, web :5173) · `make seed` · `make check` (ruff, mypy, pytest, hook tests, frontend typecheck) · `make e2e` · `make openapi`
-- Evals: `make eval-offline` (no-LLM baseline, free) · `make eval` and `make seed-live` (paid; settings make them ask first)
+- `make setup` · `make dev` (API :8000, web :5173) · `make seed` · `make check` (ruff, mypy, pytest, hook tests, frontend typecheck and unit tests) · `make e2e` · `make openapi`
+- Evals: `make eval-offline` (no-LLM baseline, free) · `make eval` and `make seed-live` (paid; settings make them ask first) · `make brief-live` and `make e2e-live` (paid; settings don't ask for them yet, so they need my go like any other live use)
 - Add new workflows as Makefile targets instead of one-off command lines.
 ---- AI design rules (product code)
 1. The model judges, code decides. Models return labels, extracted fields, ratings and rationales; thresholds, routing, scores and permissions are deterministic code and config.
-2. AI never blocks a submission. A submission is saved before any model call, enrichment runs in the background, and if the provider fails or refuses, the request goes to the PM triage queue (status needs_review, with a reason). Above the calibrated threshold a duplicate link is applied automatically (status auto_linked), shown to the PM and undoable; below it, the link is only a suggestion.
+2. AI never blocks a submission. A submission is saved before any model call, enrichment runs in the background, and if the provider fails or refuses, the request goes to the PM triage queue (status needs_review, with a reason). Above the calibrated threshold a duplicate link is applied automatically (suggestion state applied, listed in the PM's Auto-linked tab), shown to the PM and undoable; below it, the link is only a suggestion.
 3. User text is untrusted data. Pass it inside XML tags, never as instructions, and give the model no tools that write in the intake path. A successful prompt injection can at worst produce a wrong suggestion that a human reviews or undoes.
 4. Structured outputs only, validated with Pydantic. No regex parsing of model prose.
 5. Every model call goes through the gateway and is recorded in ai_runs (step, model, prompt version, tokens, cost, latency, outcome).

@@ -1,4 +1,7 @@
-"""The intake workflow (ADR 0001): redact, embed, retrieve, extract, adjudicate, route, enrich, mark processed.
+"""The intake workflow (ADR 0001): redact, embed, retrieve, extract, adjudicate, route, mark processed.
+
+It then queues a strategic-fit rating when one is due; demand, urgency and priority are computed on read
+(app/services/priority.py, ADR 0009), not here.
 
 Model calls happen first; every result is written in one transaction with status processed, so a retry
 never leaves half a decision behind (ADR 0007). AIRuns are written separately, so failed calls still count.

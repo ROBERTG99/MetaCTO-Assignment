@@ -6,13 +6,17 @@ from typing import Any
 
 from fastapi import Request
 from sqlalchemy import event
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, make_url
 from sqlmodel import Session, SQLModel, create_engine
 
 from app.config import get_settings
 
 
 def make_engine(url: str) -> Engine:
+    # A fresh clone has no backend/data/ (gitignored); SQLite can create the file but not its folder.
+    folder = os.path.dirname(make_url(url).database or "")
+    if folder:
+        os.makedirs(folder, exist_ok=True)
     engine = create_engine(url, connect_args={"check_same_thread": False})
 
     @event.listens_for(engine, "connect")
@@ -39,9 +43,6 @@ def get_engine() -> Engine:
 def create_tables(engine: Engine) -> None:
     import app.models  # noqa: F401  (registers the tables)
 
-    folder = os.path.dirname(engine.url.database or "")
-    if folder:
-        os.makedirs(folder, exist_ok=True)
     SQLModel.metadata.create_all(engine)
 
 

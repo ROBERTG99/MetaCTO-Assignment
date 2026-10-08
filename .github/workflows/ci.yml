@@ -39,6 +39,8 @@ jobs:
           key: fastembed-bge-small-en-v1.5
       - name: Install dependencies and the embedding model
         run: make setup-backend
+      - name: Quick start on a clean checkout (README step 2, offline; no backend/data/ yet)
+        run: make seed
       - name: Ruff (lint and format)
         run: make lint
       - name: Mypy (strict)
